@@ -18,6 +18,7 @@ TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
     "postgresql+psycopg://clinic:clinic_local_password@localhost:5433/clinic_confirmations_test",
 )
+TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6380/0")
 
 
 @pytest.fixture(scope="session")
@@ -25,7 +26,7 @@ def database_engine() -> Iterator[Engine]:
     settings = Settings(
         _env_file=None,
         database_url=TEST_DATABASE_URL,
-        redis_url="redis://localhost:6380/0",
+        redis_url=TEST_REDIS_URL,
     )
     engine = create_database_engine(settings)
     yield engine
@@ -49,7 +50,7 @@ def test_settings() -> Settings:
     return Settings(
         _env_file=None,
         database_url=TEST_DATABASE_URL,
-        redis_url="redis://localhost:6380/0",
+        redis_url=TEST_REDIS_URL,
     )
 
 

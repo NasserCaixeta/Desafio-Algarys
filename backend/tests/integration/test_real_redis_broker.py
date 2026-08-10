@@ -12,7 +12,7 @@ def test_celery_places_json_task_on_real_redis_broker(
     queue_name = f"confirmations-test-{uuid4().hex}"
     settings = test_settings.model_copy(
         update={
-            "redis_url": "redis://localhost:6380/15",
+            "redis_url": f"{test_settings.redis_url.rsplit('/', 1)[0]}/15",
             "celery_queue": queue_name,
         }
     )
