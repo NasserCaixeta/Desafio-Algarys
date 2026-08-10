@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request, Response
 
 from clinic_confirmations.api.error_handlers import register_error_handlers
+from clinic_confirmations.api.routers.appointments import router as appointments_router
 from clinic_confirmations.api.routers.imports import router as imports_router
 from clinic_confirmations.core.config import Settings, get_settings
 from clinic_confirmations.db.session import create_database_engine, create_session_factory
@@ -41,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     register_error_handlers(app)
+    app.include_router(appointments_router, prefix="/api/v1")
     app.include_router(imports_router, prefix="/api/v1")
     return app
 

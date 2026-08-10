@@ -35,3 +35,10 @@ class UploadTooLargeError(CsvImportError):
     def __init__(self, max_bytes: int) -> None:
         self.max_bytes = max_bytes
         super().__init__(f"O arquivo excede o limite de {max_bytes} bytes.")
+
+
+class AppointmentNotFoundError(LookupError):
+    """Raised when an appointment identifier does not exist."""
+
+    def __init__(self) -> None:
+        super().__init__("Agendamento não encontrado.")

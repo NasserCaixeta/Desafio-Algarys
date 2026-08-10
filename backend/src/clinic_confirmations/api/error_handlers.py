@@ -6,6 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from clinic_confirmations.domain.errors import (
+    AppointmentNotFoundError,
     InvalidCsvEncodingError,
     InvalidCsvFormatError,
     InvalidCsvHeaderError,
@@ -40,6 +41,17 @@ def _error_response(
 
 
 def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(AppointmentNotFoundError)
+    async def appointment_not_found(
+        request: Request, exc: AppointmentNotFoundError
+    ) -> JSONResponse:
+        return _error_response(
+            request,
+            status_code=404,
+            code="appointment_not_found",
+            message=str(exc),
+        )
+
     @app.exception_handler(InvalidCsvHeaderError)
     async def invalid_csv_header(request: Request, exc: InvalidCsvHeaderError) -> JSONResponse:
         return _error_response(
