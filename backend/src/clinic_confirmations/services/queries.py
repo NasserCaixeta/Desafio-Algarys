@@ -25,7 +25,7 @@ def list_appointments(
     page: int,
     page_size: int,
 ) -> AppointmentList:
-    start_at, end_at = _utc_day_bounds(appointment_date, timezone)
+    start_at, end_at = optional_utc_day_bounds(appointment_date, timezone)
     appointments, total = AppointmentRepository(session).list_with_message(
         start_at=start_at,
         end_at=end_at,
@@ -51,12 +51,19 @@ def get_appointment(session: Session, appointment_id: UUID) -> AppointmentRead:
     return _to_read(appointment)
 
 
-def _utc_day_bounds(
+def optional_utc_day_bounds(
     appointment_date: date | None,
     timezone: ZoneInfo,
 ) -> tuple[datetime | None, datetime | None]:
     if appointment_date is None:
         return None, None
+    return utc_day_bounds(appointment_date, timezone)
+
+
+def utc_day_bounds(
+    appointment_date: date,
+    timezone: ZoneInfo,
+) -> tuple[datetime, datetime]:
     start_local = datetime.combine(appointment_date, time.min, tzinfo=timezone)
     end_local = start_local + timedelta(days=1)
     return start_local.astimezone(UTC), end_local.astimezone(UTC)

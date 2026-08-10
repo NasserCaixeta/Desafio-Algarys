@@ -67,3 +67,16 @@ class AppointmentRepository:
             .where(Appointment.id == appointment_id)
         )
         return self._session.scalar(statement)
+
+    def list_dispatch_candidates(
+        self,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> list[tuple[UUID, AppointmentStatus]]:
+        statement = (
+            select(Appointment.id, Appointment.status)
+            .where(Appointment.scheduled_at >= start_at)
+            .where(Appointment.scheduled_at < end_at)
+            .order_by(Appointment.id)
+        )
+        return list(self._session.execute(statement).tuples().all())
