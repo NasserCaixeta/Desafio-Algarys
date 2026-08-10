@@ -103,7 +103,7 @@ Para desenvolvimento fora dos containers:
 ## Do clone ao primeiro uso
 
 ```bash
-git clone <URL_DO_REPOSITORIO>
+git clone https://github.com/NasserCaixeta/Desafio-Algarys.git
 cd Desafio-Algarys
 cp .env.example .env
 docker compose up --build
