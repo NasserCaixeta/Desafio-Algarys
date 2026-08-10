@@ -5,14 +5,18 @@ from io import StringIO
 from zoneinfo import ZoneInfo
 
 import phonenumbers
+from sqlalchemy.orm import Session
 
 from clinic_confirmations.domain.errors import (
     InvalidCsvEncodingError,
     InvalidCsvFormatError,
     InvalidCsvHeaderError,
 )
+from clinic_confirmations.repositories.appointments import AppointmentRepository
 from clinic_confirmations.schemas.imports import (
+    ImportReport,
     ImportRowError,
+    ImportSummary,
     NormalizedImportRow,
     ParsedImport,
 )
@@ -99,6 +103,36 @@ def parse_csv(content: bytes, timezone: ZoneInfo) -> ParsedImport:
         raise InvalidCsvFormatError from exc
 
     return ParsedImport(total_rows=total_rows, valid_rows=valid_rows, errors=errors)
+
+
+def import_appointments_from_csv(
+    content: bytes,
+    timezone: ZoneInfo,
+    session: Session,
+) -> ImportReport:
+    parsed = parse_csv(content, timezone)
+    repository = AppointmentRepository(session)
+    imported_lines: list[int] = []
+    duplicate_lines: list[int] = []
+
+    for row in parsed.valid_rows:
+        if repository.insert_import_row_if_absent(row) is None:
+            duplicate_lines.append(row.line_number)
+        else:
+            imported_lines.append(row.line_number)
+
+    session.commit()
+    return ImportReport(
+        summary=ImportSummary(
+            total_rows=parsed.total_rows,
+            imported=len(imported_lines),
+            rejected=len(parsed.errors),
+            duplicates=len(duplicate_lines),
+        ),
+        imported_lines=imported_lines,
+        duplicate_lines=duplicate_lines,
+        errors=parsed.errors,
+    )
 
 
 def _raw_data(values: list[str]) -> dict[str, str]:

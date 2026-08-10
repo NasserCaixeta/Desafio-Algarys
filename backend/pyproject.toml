@@ -22,7 +22,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "httpx>=0.28,<1",
+  "httpx2>=2,<3",
   "mypy>=1.14,<2",
   "pytest>=8.3,<9",
   "pytest-cov>=6,<8",
@@ -35,6 +35,7 @@ packages = ["src/clinic_confirmations"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"
+filterwarnings = ["error"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 

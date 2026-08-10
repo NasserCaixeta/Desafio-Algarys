@@ -35,8 +35,10 @@ class Settings(BaseSettings):
     max_upload_bytes: PositiveInt = 5 * 1024 * 1024
     dependency_timeout_seconds: PositiveInt = 2
 
-    database_url: str
-    redis_url: str
+    database_url: str = (
+        "postgresql+psycopg://clinic:clinic_local_password@localhost:5433/clinic_confirmations"
+    )
+    redis_url: str = "redis://localhost:6380/0"
     celery_queue: str = "confirmations"
     celery_visibility_timeout_seconds: PositiveInt = 3600
     reconciliation_interval_seconds: PositiveInt = 5
