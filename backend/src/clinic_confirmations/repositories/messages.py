@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from clinic_confirmations.db.models import Appointment, ConfirmationMessage, MessageAttempt
 from clinic_confirmations.domain.enums import AttemptResult, MessageStatus
@@ -255,6 +255,38 @@ class MessageRepository:
             .where(MessageAttempt.processing_token == processing_token)
             .where(MessageAttempt.result == AttemptResult.PROCESSING)
         )
+
+    def list_messages(
+        self,
+        *,
+        status: MessageStatus | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[ConfirmationMessage], int]:
+        conditions: list[ColumnElement[bool]] = []
+        if status is not None:
+            conditions.append(ConfirmationMessage.status == status)
+        total = self._session.scalar(
+            select(func.count()).select_from(ConfirmationMessage).where(*conditions)
+        )
+        statement = (
+            select(ConfirmationMessage)
+            .where(*conditions)
+            .order_by(ConfirmationMessage.created_at.desc(), ConfirmationMessage.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(self._session.scalars(statement).all()), total or 0
+
+    def get_with_attempts(self, message_id: UUID) -> ConfirmationMessage | None:
+        return self._session.scalar(
+            select(ConfirmationMessage)
+            .options(selectinload(ConfirmationMessage.attempts))
+            .where(ConfirmationMessage.id == message_id)
+        )
+
+    def get(self, message_id: UUID) -> ConfirmationMessage | None:
+        return self._session.get(ConfirmationMessage, message_id)
 
     def _complete_attempt(
         self,

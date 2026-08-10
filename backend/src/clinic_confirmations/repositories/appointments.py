@@ -80,3 +80,12 @@ class AppointmentRepository:
             .order_by(Appointment.id)
         )
         return list(self._session.execute(statement).tuples().all())
+
+    def lock_with_message(self, appointment_id: UUID) -> Appointment | None:
+        statement = (
+            select(Appointment)
+            .options(selectinload(Appointment.confirmation_message))
+            .where(Appointment.id == appointment_id)
+            .with_for_update()
+        )
+        return self._session.scalar(statement)

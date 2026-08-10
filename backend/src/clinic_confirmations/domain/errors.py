@@ -57,3 +57,13 @@ class RetryLimitReachedError(RuntimeError):
 class RetryNotAllowedError(RuntimeError):
     def __init__(self) -> None:
         super().__init__("A mensagem não está em estado de falha.")
+
+
+class MessageNotSentError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("A resposta só pode ser registrada após o envio da mensagem.")
+
+
+class ResponseConflictError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("A resposta do paciente não pode ser alterada.")

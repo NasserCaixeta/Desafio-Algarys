@@ -10,6 +10,11 @@ from clinic_confirmations.domain.errors import (
     InvalidCsvEncodingError,
     InvalidCsvFormatError,
     InvalidCsvHeaderError,
+    MessageNotFoundError,
+    MessageNotSentError,
+    ResponseConflictError,
+    RetryLimitReachedError,
+    RetryNotAllowedError,
     UploadTooLargeError,
 )
 
@@ -41,6 +46,51 @@ def _error_response(
 
 
 def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(MessageNotFoundError)
+    async def message_not_found(request: Request, exc: MessageNotFoundError) -> JSONResponse:
+        return _error_response(
+            request,
+            status_code=404,
+            code="message_not_found",
+            message=str(exc),
+        )
+
+    @app.exception_handler(MessageNotSentError)
+    async def message_not_sent(request: Request, exc: MessageNotSentError) -> JSONResponse:
+        return _error_response(
+            request,
+            status_code=409,
+            code="message_not_sent",
+            message=str(exc),
+        )
+
+    @app.exception_handler(ResponseConflictError)
+    async def response_conflict(request: Request, exc: ResponseConflictError) -> JSONResponse:
+        return _error_response(
+            request,
+            status_code=409,
+            code="response_conflict",
+            message=str(exc),
+        )
+
+    @app.exception_handler(RetryLimitReachedError)
+    async def retry_limit_reached(request: Request, exc: RetryLimitReachedError) -> JSONResponse:
+        return _error_response(
+            request,
+            status_code=409,
+            code="retry_limit_reached",
+            message=str(exc),
+        )
+
+    @app.exception_handler(RetryNotAllowedError)
+    async def retry_not_allowed(request: Request, exc: RetryNotAllowedError) -> JSONResponse:
+        return _error_response(
+            request,
+            status_code=409,
+            code="retry_not_allowed",
+            message=str(exc),
+        )
+
     @app.exception_handler(AppointmentNotFoundError)
     async def appointment_not_found(
         request: Request, exc: AppointmentNotFoundError

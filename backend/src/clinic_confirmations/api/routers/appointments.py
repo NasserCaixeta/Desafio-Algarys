@@ -10,7 +10,12 @@ from clinic_confirmations.api.dependencies import get_app_settings, get_db_sessi
 from clinic_confirmations.core.config import Settings
 from clinic_confirmations.domain.enums import AppointmentStatus
 from clinic_confirmations.schemas.appointments import AppointmentList, AppointmentRead
+from clinic_confirmations.schemas.messages import (
+    PatientResponseRequest,
+    PatientResponseResult,
+)
 from clinic_confirmations.services.queries import get_appointment, list_appointments
+from clinic_confirmations.services.response import record_patient_response
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -40,3 +45,16 @@ def get_appointment_route(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> AppointmentRead:
     return get_appointment(session, appointment_id)
+
+
+@router.post("/{appointment_id}/response", response_model=PatientResponseResult)
+def patient_response_route(
+    appointment_id: UUID,
+    payload: PatientResponseRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PatientResponseResult:
+    return record_patient_response(
+        session,
+        appointment_id,
+        AppointmentStatus(payload.status),
+    )

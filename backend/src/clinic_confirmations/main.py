@@ -8,6 +8,7 @@ from clinic_confirmations.api.error_handlers import register_error_handlers
 from clinic_confirmations.api.routers.appointments import router as appointments_router
 from clinic_confirmations.api.routers.confirmations import router as confirmations_router
 from clinic_confirmations.api.routers.imports import router as imports_router
+from clinic_confirmations.api.routers.messages import router as messages_router
 from clinic_confirmations.core.config import Settings, get_settings
 from clinic_confirmations.db.session import create_database_engine, create_session_factory
 from clinic_confirmations.queue.celery_app import create_celery_app
@@ -48,6 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(appointments_router, prefix="/api/v1")
     app.include_router(confirmations_router, prefix="/api/v1")
     app.include_router(imports_router, prefix="/api/v1")
+    app.include_router(messages_router, prefix="/api/v1")
     return app
 
 
