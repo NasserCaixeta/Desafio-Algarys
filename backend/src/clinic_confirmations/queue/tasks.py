@@ -2,6 +2,12 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from clinic_confirmations.core.config import get_settings
+from clinic_confirmations.core.logging import (
+    bind_context,
+    clear_context,
+    configure_logging,
+    get_logger,
+)
 from clinic_confirmations.db.session import create_database_engine, create_session_factory
 from clinic_confirmations.queue.celery_app import celery_app
 from clinic_confirmations.queue.publisher import reconcile_enqueue
@@ -12,9 +18,18 @@ from clinic_confirmations.services.retry import (
     schedule_due_retries,
 )
 
+settings = get_settings()
+configure_logging(
+    service="worker",
+    level=settings.log_level,
+    json_output=settings.log_json,
+)
+logger = get_logger()
+
 
 def reconcile_enqueue_task() -> int:
-    settings = get_settings()
+    clear_context()
+    logger.info("reconciliation_started")
     engine = create_database_engine(settings)
     session_factory = create_session_factory(engine)
     try:
@@ -31,18 +46,26 @@ def reconcile_enqueue_task() -> int:
                 now=now,
                 batch_size=settings.reconciliation_batch_size,
             )
-            return reconcile_enqueue(
+            published = reconcile_enqueue(
                 session,
                 celery_app,
                 settings,
                 batch_size=settings.reconciliation_batch_size,
             )
+            logger.info("reconciliation_completed", published_count=published)
+            return published
+    except Exception:
+        logger.exception("reconciliation_failed")
+        raise
     finally:
         engine.dispose()
+        clear_context()
 
 
 def process_message_task(message_id: str, correlation_id: str) -> dict[str, object]:
-    settings = get_settings()
+    clear_context()
+    bind_context(correlation_id=correlation_id, message_id=message_id)
+    logger.info("message_processing_started")
     engine = create_database_engine(settings)
     session_factory = create_session_factory(engine)
     sender = SimulatedSender(
@@ -57,15 +80,27 @@ def process_message_task(message_id: str, correlation_id: str) -> dict[str, obje
             UUID(message_id),
             settings,
         )
-        return {
+        payload: dict[str, object] = {
             "claimed": result.claimed,
             "status": result.status.value if result.status is not None else None,
             "attempt_number": result.attempt_number,
             "finalized": result.finalized,
             "correlation_id": correlation_id,
         }
+        logger.info(
+            "message_processing_completed",
+            claimed=result.claimed,
+            status=payload["status"],
+            attempt_number=result.attempt_number,
+            finalized=result.finalized,
+        )
+        return payload
+    except Exception:
+        logger.exception("message_processing_failed")
+        raise
     finally:
         engine.dispose()
+        clear_context()
 
 
 celery_app.task(name="clinic.reconcile_enqueue")(reconcile_enqueue_task)

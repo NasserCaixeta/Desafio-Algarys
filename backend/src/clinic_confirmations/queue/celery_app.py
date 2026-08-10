@@ -19,6 +19,8 @@ def create_celery_app(settings: Settings) -> Celery:
         task_acks_late=True,
         task_reject_on_worker_lost=True,
         worker_prefetch_multiplier=1,
+        worker_redirect_stdouts=False,
+        worker_hijack_root_logger=False,
         broker_transport_options={"visibility_timeout": settings.celery_visibility_timeout_seconds},
         beat_schedule={
             "reconcile-enqueue": {

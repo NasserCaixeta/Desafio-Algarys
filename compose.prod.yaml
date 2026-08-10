@@ -1,0 +1,87 @@
+name: clinic-confirmations
+
+x-production-environment: &production-environment
+  APP_ENV: production
+  LOG_JSON: "true"
+  CORS_ORIGINS: https://${DOMAIN:-example.com}
+
+services:
+  postgres:
+    ports: !reset []
+    restart: always
+
+  redis:
+    ports: !reset []
+    restart: always
+
+  migrate:
+    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-api:${IMAGE_TAG:-latest}
+    pull_policy: always
+    environment: *production-environment
+
+  api:
+    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-api:${IMAGE_TAG:-latest}
+    pull_policy: always
+    environment: *production-environment
+    ports: !reset []
+    restart: always
+
+  worker:
+    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-worker:${IMAGE_TAG:-latest}
+    pull_policy: always
+    environment: *production-environment
+    restart: always
+
+  scheduler:
+    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-worker:${IMAGE_TAG:-latest}
+    pull_policy: always
+    environment: *production-environment
+    restart: always
+
+  frontend:
+    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-frontend:${IMAGE_TAG:-latest}
+    pull_policy: always
+    ports: !reset []
+    restart: always
+
+  nginx:
+    image: nginx:1.28-alpine
+    environment:
+      DOMAIN: ${DOMAIN:-example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-qO-", "https://127.0.0.1/nginx-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
+    networks:
+      - backend
+      - edge
+
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["tls"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+    command: ["renew"]
+    networks:
+      - edge
+
+volumes:
+  letsencrypt:
+
+networks:
+  edge:
+    driver: bridge

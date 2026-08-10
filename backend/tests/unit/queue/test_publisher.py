@@ -111,6 +111,8 @@ def test_celery_configuration_is_safe_for_duplicate_delivery(
     assert app.conf.task_acks_late is True
     assert app.conf.task_reject_on_worker_lost is True
     assert app.conf.worker_prefetch_multiplier == 1
+    assert app.conf.worker_redirect_stdouts is False
+    assert app.conf.worker_hijack_root_logger is False
     assert app.conf.broker_transport_options["visibility_timeout"] == 3600
     assert "reconcile-enqueue" in app.conf.beat_schedule
 

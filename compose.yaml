@@ -1,5 +1,41 @@
 name: clinic-confirmations
 
+x-backend-environment: &backend-environment
+  APP_NAME: ${APP_NAME:-Clinic Confirmations}
+  APP_VERSION: ${APP_VERSION:-1.0.0}
+  APP_ENV: ${APP_ENV:-development}
+  APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_JSON: ${LOG_JSON:-true}
+  API_HOST: 0.0.0.0
+  API_PORT: 8000
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-5242880}
+  DEPENDENCY_TIMEOUT_SECONDS: ${DEPENDENCY_TIMEOUT_SECONDS:-2}
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-clinic}:${POSTGRES_PASSWORD:-clinic_local_password}@postgres:5432/${POSTGRES_DB:-clinic_confirmations}
+  REDIS_URL: redis://redis:6379/0
+  CELERY_QUEUE: ${CELERY_QUEUE:-confirmations}
+  CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-3600}
+  RECONCILIATION_INTERVAL_SECONDS: ${RECONCILIATION_INTERVAL_SECONDS:-5}
+  RECONCILIATION_BATCH_SIZE: ${RECONCILIATION_BATCH_SIZE:-100}
+  MAX_MESSAGE_ATTEMPTS: ${MAX_MESSAGE_ATTEMPTS:-3}
+  RETRY_BACKOFF_BASE_SECONDS: ${RETRY_BACKOFF_BASE_SECONDS:-5}
+  RETRY_BACKOFF_MAX_SECONDS: ${RETRY_BACKOFF_MAX_SECONDS:-300}
+  PROCESSING_LEASE_SECONDS: ${PROCESSING_LEASE_SECONDS:-120}
+  SIMULATED_FAILURE_SUFFIXES: ${SIMULATED_FAILURE_SUFFIXES:-0000}
+  SIMULATED_FAILURE_ATTEMPTS: ${SIMULATED_FAILURE_ATTEMPTS:-1}
+  SIMULATED_LATENCY_MS: ${SIMULATED_LATENCY_MS:-250}
+
+x-backend-service: &backend-service
+  image: clinic-confirmations-backend:local
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  environment: *backend-environment
+  networks:
+    - backend
+  init: true
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -18,6 +54,8 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    networks:
+      - backend
 
   redis:
     image: redis:8-alpine
@@ -32,7 +70,135 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    networks:
+      - backend
+
+  migrate:
+    <<: *backend-service
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  api:
+    <<: *backend-service
+    command: ["uvicorn", "clinic_confirmations.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  worker:
+    <<: *backend-service
+    command:
+      [
+        "celery",
+        "-A",
+        "clinic_confirmations.queue.celery_app:celery_app",
+        "worker",
+        "--loglevel=INFO",
+        "--queues=confirmations",
+        "--concurrency=2",
+        "--hostname=worker@%h",
+      ]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A clinic_confirmations.queue.celery_app:celery_app inspect ping --destination worker@$${HOSTNAME} --timeout 5 | grep -q pong",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  scheduler:
+    <<: *backend-service
+    command:
+      [
+        "celery",
+        "-A",
+        "clinic_confirmations.queue.celery_app:celery_app",
+        "beat",
+        "--loglevel=INFO",
+        "--schedule=/tmp/celerybeat-schedule",
+      ]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from pathlib import Path; assert b'celery' in Path('/proc/1/cmdline').read_bytes()",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  frontend:
+    image: clinic-confirmations-frontend:local
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_API_TIMEOUT_MS: ${VITE_API_TIMEOUT_MS:-10000}
+        VITE_POLL_INTERVAL_MS: ${VITE_POLL_INTERVAL_MS:-2000}
+    ports:
+      - "127.0.0.1:3000:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - backend
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  backend:
+    driver: bridge
