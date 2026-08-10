@@ -1,0 +1,3 @@
+data_hora,paciente,telefone,procedimento
+15/01/2030 09:00,Smoke Sucesso,(34) 99999-1234,Consulta inicial
+2030-01-15 10:00,Smoke Retry,+55 34 99999-0000,Retorno
