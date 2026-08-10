@@ -1,10 +1,12 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from clinic_confirmations.db.models import ConfirmationMessage
+from clinic_confirmations.domain.enums import MessageStatus
 
 
 class MessageRepository:
@@ -38,3 +40,24 @@ class MessageRepository:
             .returning(ConfirmationMessage.id)
         )
         return list(self._session.scalars(statement).all())
+
+    def lock_next_reconcilable(self, now: datetime) -> ConfirmationMessage | None:
+        statement = (
+            select(ConfirmationMessage)
+            .where(ConfirmationMessage.status == MessageStatus.PENDING)
+            .where(ConfirmationMessage.enqueued_at.is_(None))
+            .where(
+                or_(
+                    ConfirmationMessage.next_enqueue_at.is_(None),
+                    ConfirmationMessage.next_enqueue_at <= now,
+                )
+            )
+            .order_by(
+                ConfirmationMessage.next_enqueue_at.asc().nullsfirst(),
+                ConfirmationMessage.created_at,
+                ConfirmationMessage.id,
+            )
+            .with_for_update(skip_locked=True)
+            .limit(1)
+        )
+        return self._session.scalar(statement)

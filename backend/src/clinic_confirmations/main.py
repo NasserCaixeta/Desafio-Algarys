@@ -10,6 +10,7 @@ from clinic_confirmations.api.routers.confirmations import router as confirmatio
 from clinic_confirmations.api.routers.imports import router as imports_router
 from clinic_confirmations.core.config import Settings, get_settings
 from clinic_confirmations.db.session import create_database_engine, create_session_factory
+from clinic_confirmations.queue.celery_app import create_celery_app
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -28,6 +29,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = resolved_settings
     app.state.session_factory = create_session_factory(engine)
+    app.state.celery_app = create_celery_app(resolved_settings)
 
     @app.middleware("http")
     async def request_id_middleware(

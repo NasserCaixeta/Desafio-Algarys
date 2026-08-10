@@ -1,20 +1,49 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from clinic_confirmations.api.dependencies import get_task_publisher
 from clinic_confirmations.db.models import Appointment, ConfirmationMessage
 from clinic_confirmations.domain.enums import AppointmentStatus
 
 DISPATCH_URL = "/api/v1/confirmations/dispatch"
 
 
+class RecordingPublisher:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.error: Exception | None = None
+
+    def send_task(
+        self,
+        name: str,
+        args: list[object] | None = None,
+        kwargs: dict[str, object] | None = None,
+        queue: str | None = None,
+    ) -> object:
+        self.calls.append({"name": name, "args": args, "kwargs": kwargs, "queue": queue})
+        if self.error is not None:
+            raise self.error
+        return object()
+
+
+@pytest.fixture(autouse=True)
+def publisher(client: TestClient) -> RecordingPublisher:
+    recording = RecordingPublisher()
+    client.app.dependency_overrides[get_task_publisher] = lambda: recording
+    return recording
+
+
 def test_repeated_dispatch_does_not_duplicate_messages(
     client: TestClient,
     db_session: Session,
     appointment_factory: Callable[..., Appointment],
+    publisher: RecordingPublisher,
 ) -> None:
     eligible = [
         appointment_factory(scheduled_at=datetime(2026, 8, 11, hour, tzinfo=UTC))
@@ -39,8 +68,8 @@ def test_repeated_dispatch_does_not_duplicate_messages(
         "created": 2,
         "already_existing": 0,
         "ignored": 1,
-        "queued": 0,
-        "pending_reconciliation": 2,
+        "queued": 2,
+        "pending_reconciliation": 0,
     }
     assert second.status_code == 200
     assert second.json() == {
@@ -56,7 +85,16 @@ def test_repeated_dispatch_does_not_duplicate_messages(
         appointment.id for appointment in eligible
     }
     assert all(message.correlation_id == "req-dispatch" for message in messages)
-    assert all(message.next_enqueue_at is not None for message in messages)
+    assert all(message.enqueued_at is not None for message in messages)
+    assert all(message.next_enqueue_at is None for message in messages)
+    assert len(publisher.calls) == 2
+    assert all(call["name"] == "clinic.process_message" for call in publisher.calls)
+    assert all(call["queue"] == "confirmations" for call in publisher.calls)
+    assert all(
+        call["kwargs"]["correlation_id"] == "req-dispatch"
+        for call in publisher.calls
+        if call["kwargs"] is not None
+    )
 
 
 def test_dispatch_uses_local_date_boundaries(
@@ -104,3 +142,25 @@ def test_dispatch_sets_configured_attempt_limit(
 
     assert response.status_code == 200
     assert db_session.scalar(select(func.max(ConfirmationMessage.max_attempts))) == 3
+
+
+def test_broker_failure_keeps_created_message_for_reconciliation(
+    client: TestClient,
+    db_session: Session,
+    appointment_factory: Callable[..., Appointment],
+    publisher: RecordingPublisher,
+) -> None:
+    appointment_factory()
+    publisher.error = ConnectionError("redis unavailable")
+
+    response = client.post(DISPATCH_URL, json={"date": "2026-08-11"})
+
+    assert response.status_code == 200
+    assert response.json()["created"] == 1
+    assert response.json()["queued"] == 0
+    assert response.json()["pending_reconciliation"] == 1
+    message = db_session.scalars(select(ConfirmationMessage)).one()
+    assert message.enqueued_at is None
+    assert message.enqueue_attempts == 1
+    assert message.last_enqueue_error == "redis unavailable"
+    assert message.next_enqueue_at is not None

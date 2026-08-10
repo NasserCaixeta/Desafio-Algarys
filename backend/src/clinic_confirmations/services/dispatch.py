@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from clinic_confirmations.core.config import Settings
 from clinic_confirmations.domain.enums import AppointmentStatus
+from clinic_confirmations.queue.publisher import TaskPublisher, publish_message
 from clinic_confirmations.repositories.appointments import AppointmentRepository
 from clinic_confirmations.repositories.messages import MessageRepository
 from clinic_confirmations.schemas.confirmations import DispatchResult
@@ -17,6 +18,7 @@ def dispatch_for_date(
     settings: Settings,
     *,
     correlation_id: str,
+    publisher: TaskPublisher | None = None,
 ) -> DispatchResult:
     start_at, end_at = utc_day_bounds(appointment_date, ZoneInfo(settings.timezone))
     candidates = AppointmentRepository(session).list_dispatch_candidates(
@@ -38,11 +40,17 @@ def dispatch_for_date(
 
     created = len(created_ids)
     eligible = len(eligible_ids)
+    queued = 0
+    if publisher is not None:
+        queued = sum(
+            publish_message(session, message_id, publisher, settings).published
+            for message_id in created_ids
+        )
     return DispatchResult(
         eligible=eligible,
         created=created,
         already_existing=eligible - created,
         ignored=len(candidates) - eligible,
-        queued=0,
-        pending_reconciliation=created,
+        queued=queued,
+        pending_reconciliation=created - queued,
     )

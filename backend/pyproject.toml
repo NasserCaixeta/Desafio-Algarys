@@ -53,5 +53,5 @@ plugins = ["pydantic.mypy"]
 packages = ["clinic_confirmations"]
 
 [[tool.mypy.overrides]]
-module = ["celery.*"]
+module = ["celery", "celery.*"]
 ignore_missing_imports = true

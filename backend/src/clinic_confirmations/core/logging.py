@@ -1,5 +1,5 @@
 import sys
-from typing import Any, TextIO
+from typing import Any, TextIO, cast
 
 import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars, merge_contextvars
@@ -45,5 +45,8 @@ def clear_context() -> None:
     clear_contextvars()
 
 
-def get_logger(**initial_values: Any) -> structlog.stdlib.BoundLogger:
-    return structlog.get_logger(service=_service, **initial_values)
+def get_logger(**initial_values: Any) -> structlog.typing.FilteringBoundLogger:
+    return cast(
+        structlog.typing.FilteringBoundLogger,
+        structlog.get_logger(service=_service, **initial_values),
+    )
