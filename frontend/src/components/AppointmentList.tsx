@@ -2,7 +2,19 @@ import type { Appointment } from "../api/types";
 import { formatAppointmentTime, formatBrazilianPhone } from "../utils/format";
 import { StatusBadge } from "./StatusBadge";
 
-export function AppointmentList({ appointments }: { appointments: Appointment[] }) {
+interface AppointmentListProps {
+  appointments: Appointment[];
+  actionsDisabled: boolean;
+  onRespond: (appointmentId: string, status: "confirmed" | "declined") => void;
+  onRetry: (messageId: string) => void;
+}
+
+export function AppointmentList({
+  appointments,
+  actionsDisabled,
+  onRespond,
+  onRetry,
+}: AppointmentListProps) {
   return (
     <div className="table-scroll">
       <table aria-label="Agenda de consultas">
@@ -15,6 +27,7 @@ export function AppointmentList({ appointments }: { appointments: Appointment[] 
             <th scope="col">Consulta</th>
             <th scope="col">Mensagem</th>
             <th scope="col">Tentativas</th>
+            <th scope="col">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -44,10 +57,75 @@ export function AppointmentList({ appointments }: { appointments: Appointment[] 
                   ? `${appointment.message.attempt_count}/${appointment.message.max_attempts}`
                   : "—"}
               </td>
+              <td data-label="Ações">
+                <AppointmentActions
+                  appointment={appointment}
+                  disabled={actionsDisabled}
+                  onRespond={onRespond}
+                  onRetry={onRetry}
+                />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+function AppointmentActions({
+  appointment,
+  disabled,
+  onRespond,
+  onRetry,
+}: {
+  appointment: Appointment;
+  disabled: boolean;
+  onRespond: AppointmentListProps["onRespond"];
+  onRetry: AppointmentListProps["onRetry"];
+}) {
+  const message = appointment.message;
+
+  if (message?.status === "sent" && appointment.status === "pending") {
+    return (
+      <div className="row-actions">
+        <button
+          type="button"
+          className="action-button action-confirm"
+          disabled={disabled}
+          onClick={() => onRespond(appointment.id, "confirmed")}
+        >
+          Confirmar
+        </button>
+        <button
+          type="button"
+          className="action-button action-decline"
+          disabled={disabled}
+          onClick={() => onRespond(appointment.id, "declined")}
+        >
+          Recusar
+        </button>
+      </div>
+    );
+  }
+
+  if (message?.status === "failed") {
+    const exhausted = message.attempt_count >= message.max_attempts;
+    return (
+      <button
+        type="button"
+        className="action-button"
+        disabled={disabled || exhausted}
+        onClick={() => onRetry(message.id)}
+      >
+        {exhausted ? "Limite atingido" : "Reprocessar"}
+      </button>
+    );
+  }
+
+  if (appointment.status !== "pending") {
+    return <span className="muted">Resposta registrada</span>;
+  }
+
+  return <span className="muted">Aguardando envio</span>;
 }

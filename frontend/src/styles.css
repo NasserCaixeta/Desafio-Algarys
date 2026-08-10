@@ -65,6 +65,30 @@ select {
   gap: 0.75rem;
 }
 
+.dashboard-controls {
+  display: grid;
+  justify-items: end;
+  gap: 0.75rem;
+}
+
+.dispatch-button {
+  width: fit-content;
+}
+
+.action-feedback {
+  margin: -0.25rem 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.6rem;
+  background: #edf7ee;
+  color: #166534;
+  font-weight: 700;
+}
+
+.action-feedback.state-error {
+  background: #fff1f2;
+  color: #991b1b;
+}
+
 .filters label {
   display: grid;
   gap: 0.35rem;
@@ -218,6 +242,36 @@ th {
   font-size: 0.8rem;
 }
 
+.row-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.action-button {
+  min-height: 44px;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #aebbd0;
+  border-radius: 0.55rem;
+  background: #fff;
+  color: #29364b;
+  font-weight: 750;
+}
+
+.action-confirm {
+  border-color: #86c99a;
+  color: #166534;
+}
+
+.action-decline {
+  border-color: #e6a5a5;
+  color: #991b1b;
+}
+
+.action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .muted {
   color: #68758a;
 }
@@ -254,9 +308,18 @@ th {
 
 @media (max-width: 760px) {
   .panel-heading,
-  .filters {
+  .filters,
+  .dashboard-controls {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .dashboard-controls {
+    display: flex;
+  }
+
+  .dispatch-button {
+    width: 100%;
   }
 
   .table-scroll {
