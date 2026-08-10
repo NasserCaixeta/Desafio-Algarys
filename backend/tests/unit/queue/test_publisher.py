@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from importlib import import_module
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -112,3 +113,11 @@ def test_celery_configuration_is_safe_for_duplicate_delivery(
     assert app.conf.worker_prefetch_multiplier == 1
     assert app.conf.broker_transport_options["visibility_timeout"] == 3600
     assert "reconcile-enqueue" in app.conf.beat_schedule
+
+
+def test_worker_tasks_are_registered() -> None:
+    from clinic_confirmations.queue.celery_app import celery_app
+
+    import_module("clinic_confirmations.queue.tasks")
+    assert "clinic.process_message" in celery_app.tasks
+    assert "clinic.reconcile_enqueue" in celery_app.tasks
