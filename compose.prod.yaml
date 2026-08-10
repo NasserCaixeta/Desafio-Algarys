@@ -15,31 +15,31 @@ services:
     restart: always
 
   migrate:
-    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/clinic-confirmations-api:${IMAGE_TAG:?set IMAGE_TAG}
     pull_policy: always
     environment: *production-environment
 
   api:
-    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/clinic-confirmations-api:${IMAGE_TAG:?set IMAGE_TAG}
     pull_policy: always
     environment: *production-environment
     ports: !reset []
     restart: always
 
   worker:
-    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-worker:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/clinic-confirmations-worker:${IMAGE_TAG:?set IMAGE_TAG}
     pull_policy: always
     environment: *production-environment
     restart: always
 
   scheduler:
-    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-worker:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/clinic-confirmations-worker:${IMAGE_TAG:?set IMAGE_TAG}
     pull_policy: always
     environment: *production-environment
     restart: always
 
   frontend:
-    image: ghcr.io/${GHCR_OWNER:-your-github-user}/clinic-confirmations-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/clinic-confirmations-frontend:${IMAGE_TAG:?set IMAGE_TAG}
     pull_policy: always
     ports: !reset []
     restart: always
@@ -47,13 +47,14 @@ services:
   nginx:
     image: nginx:1.28-alpine
     environment:
-      DOMAIN: ${DOMAIN:-example.com}
+      DOMAIN: ${DOMAIN:?set DOMAIN}
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./deploy/nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
       - letsencrypt:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
     depends_on:
       api:
         condition: service_healthy
@@ -71,16 +72,18 @@ services:
       - edge
 
   certbot:
-    image: certbot/certbot:latest
+    image: certbot/certbot:v5.7.0
     profiles: ["tls"]
     volumes:
       - letsencrypt:/etc/letsencrypt
-    command: ["renew"]
+      - certbot_www:/var/www/certbot
+    command: ["renew", "--webroot", "--webroot-path=/var/www/certbot"]
     networks:
       - edge
 
 volumes:
   letsencrypt:
+  certbot_www:
 
 networks:
   edge:

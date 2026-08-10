@@ -125,7 +125,10 @@ jobs:
       - name: Validate Compose configurations
         run: |
           docker compose config --quiet
-          docker compose -f compose.yaml -f compose.prod.yaml config --quiet
+          DOMAIN=clinic.example.com GHCR_OWNER=example IMAGE_TAG=ci \
+            docker compose -f compose.yaml -f compose.prod.yaml config --quiet
+          DOMAIN=clinic.example.com GHCR_OWNER=example IMAGE_TAG=ci POSTGRES_PASSWORD=ci-password \
+            docker compose -f deploy/portainer/stack.yaml config --quiet
 
       - name: Build application images
         run: docker compose build api frontend

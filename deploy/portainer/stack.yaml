@@ -1,0 +1,222 @@
+name: clinic-confirmations
+
+x-backend-environment: &backend-environment
+  APP_NAME: Clinic Confirmations
+  APP_VERSION: ${IMAGE_TAG:?set IMAGE_TAG}
+  APP_ENV: production
+  APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_JSON: "true"
+  API_HOST: 0.0.0.0
+  API_PORT: 8000
+  CORS_ORIGINS: https://${DOMAIN:?set DOMAIN}
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-5242880}
+  DEPENDENCY_TIMEOUT_SECONDS: ${DEPENDENCY_TIMEOUT_SECONDS:-2}
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-clinic}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clinic_confirmations}
+  REDIS_URL: redis://redis:6379/0
+  CELERY_QUEUE: ${CELERY_QUEUE:-confirmations}
+  CELERY_VISIBILITY_TIMEOUT_SECONDS: ${CELERY_VISIBILITY_TIMEOUT_SECONDS:-3600}
+  RECONCILIATION_INTERVAL_SECONDS: ${RECONCILIATION_INTERVAL_SECONDS:-5}
+  RECONCILIATION_BATCH_SIZE: ${RECONCILIATION_BATCH_SIZE:-100}
+  MAX_MESSAGE_ATTEMPTS: ${MAX_MESSAGE_ATTEMPTS:-3}
+  RETRY_BACKOFF_BASE_SECONDS: ${RETRY_BACKOFF_BASE_SECONDS:-5}
+  RETRY_BACKOFF_MAX_SECONDS: ${RETRY_BACKOFF_MAX_SECONDS:-300}
+  PROCESSING_LEASE_SECONDS: ${PROCESSING_LEASE_SECONDS:-120}
+  SIMULATED_FAILURE_SUFFIXES: ${SIMULATED_FAILURE_SUFFIXES:-0000}
+  SIMULATED_FAILURE_ATTEMPTS: ${SIMULATED_FAILURE_ATTEMPTS:-1}
+  SIMULATED_LATENCY_MS: ${SIMULATED_LATENCY_MS:-250}
+
+x-backend-service: &backend-service
+  image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/clinic-confirmations-api:${IMAGE_TAG:?set IMAGE_TAG}
+  pull_policy: always
+  environment: *backend-environment
+  networks: [backend]
+  init: true
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-clinic_confirmations}
+      POSTGRES_USER: ${POSTGRES_USER:-clinic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: always
+    networks: [backend]
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: always
+    networks: [backend]
+
+  migrate:
+    <<: *backend-service
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  api:
+    <<: *backend-service
+    command: ["uvicorn", "clinic_confirmations.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: always
+
+  worker:
+    <<: *backend-service
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/clinic-confirmations-worker:${IMAGE_TAG:?set IMAGE_TAG}
+    command:
+      [
+        "celery",
+        "-A",
+        "clinic_confirmations.queue.celery_app:celery_app",
+        "worker",
+        "--loglevel=INFO",
+        "--queues=confirmations",
+        "--concurrency=2",
+        "--hostname=worker@%h",
+      ]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A clinic_confirmations.queue.celery_app:celery_app inspect ping --destination worker@$${HOSTNAME} --timeout 5 | grep -q pong",
+        ]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    restart: always
+
+  scheduler:
+    <<: *backend-service
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/clinic-confirmations-worker:${IMAGE_TAG:?set IMAGE_TAG}
+    command:
+      [
+        "celery",
+        "-A",
+        "clinic_confirmations.queue.celery_app:celery_app",
+        "beat",
+        "--loglevel=INFO",
+        "--schedule=/tmp/celerybeat-schedule",
+      ]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from pathlib import Path; assert b'celery' in Path('/proc/1/cmdline').read_bytes()",
+        ]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: always
+
+  frontend:
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/clinic-confirmations-frontend:${IMAGE_TAG:?set IMAGE_TAG}
+    pull_policy: always
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/nginx-health"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: always
+    networks: [backend]
+
+  nginx:
+    image: nginx:1.28-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-qO-", "https://127.0.0.1/nginx-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
+    networks: [backend, edge]
+
+  certbot:
+    image: certbot/certbot:v5.7.0
+    profiles: ["tls"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    command: ["renew", "--webroot", "--webroot-path=/var/www/certbot"]
+    networks: [edge]
+
+volumes:
+  postgres_data:
+  redis_data:
+  letsencrypt:
+  certbot_www:
+
+networks:
+  backend:
+    internal: true
+  edge:
