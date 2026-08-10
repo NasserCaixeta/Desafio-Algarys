@@ -1,0 +1,38 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+
+# Frontend
+node_modules/
+dist/
+coverage/
+
+# Runtime data
+postgres_data/
+redis_data/
+*.pid
+*.log
+
+# IDE and operating system
+.DS_Store
+.idea/
+.vscode/
+
+# Local Superpowers process artifacts (explicitly excluded by user request)
+docs/superpowers/
+
+# Visual QA evidence is transient
+tmp/
