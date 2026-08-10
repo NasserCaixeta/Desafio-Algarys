@@ -107,15 +107,15 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "attempt_count >= 0",
-            name="ck_confirmation_messages_attempt_count_non_negative",
+            name=op.f("ck_confirmation_messages_attempt_count_non_negative"),
         ),
         sa.CheckConstraint(
             "enqueue_attempts >= 0",
-            name="ck_confirmation_messages_enqueue_attempts_non_negative",
+            name=op.f("ck_confirmation_messages_enqueue_attempts_non_negative"),
         ),
         sa.CheckConstraint(
             "max_attempts > 0",
-            name="ck_confirmation_messages_max_attempts_positive",
+            name=op.f("ck_confirmation_messages_max_attempts_positive"),
         ),
         sa.ForeignKeyConstraint(
             ["appointment_id"],
