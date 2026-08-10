@@ -244,6 +244,7 @@ th {
 
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 
@@ -304,6 +305,13 @@ th {
 
 .pagination button:disabled {
   opacity: 0.5;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
 }
 
 @media (max-width: 760px) {
@@ -370,5 +378,9 @@ th {
 
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .row-actions .action-button {
+    flex: 1 1 8rem;
   }
 }

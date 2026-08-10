@@ -105,7 +105,9 @@ it("confirms dispatch and reports created messages", async () => {
 
   expect(confirm).toHaveBeenCalledOnce();
   expect(receivedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-  expect(await screen.findByText("3 mensagens criadas")).toBeInTheDocument();
+  expect(
+    await screen.findByText("3 mensagens criadas, 0 duplicadas e 0 ignoradas"),
+  ).toBeInTheDocument();
 });
 
 it("does not dispatch when the operator cancels confirmation", async () => {

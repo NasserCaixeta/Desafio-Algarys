@@ -34,7 +34,11 @@ export function App() {
     prepareAction();
     try {
       const result = await actions.dispatch.mutateAsync(date);
-      setFeedback(`${result.created} ${result.created === 1 ? "mensagem criada" : "mensagens criadas"}`);
+      setFeedback(
+        `${result.created} ${result.created === 1 ? "mensagem criada" : "mensagens criadas"}, ` +
+          `${result.already_existing} ${result.already_existing === 1 ? "duplicada" : "duplicadas"} e ` +
+          `${result.ignored} ${result.ignored === 1 ? "ignorada" : "ignoradas"}`,
+      );
     } catch (error) {
       setActionError(messageFrom(error));
     }

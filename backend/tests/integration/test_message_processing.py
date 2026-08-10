@@ -79,6 +79,32 @@ def test_failure_persists_attempt_error_and_retry_time(
         _delete_committed_appointment(session_factory, appointment_id)
 
 
+def test_final_failure_does_not_schedule_an_impossible_retry(
+    database_engine: Engine,
+    test_settings: Settings,
+) -> None:
+    session_factory = create_session_factory(database_engine)
+    appointment_id, message_id = _create_committed_message(
+        session_factory,
+        phone="+5534999990000",
+        max_attempts=1,
+    )
+    sender = SimulatedSender(("0000",), failure_attempts=1, latency_ms=0)
+
+    try:
+        result = process_message(session_factory, sender, message_id, test_settings)
+
+        assert result.status == MessageStatus.FAILED
+        assert result.attempt_number == 1
+        with session_factory() as session:
+            message = session.get(ConfirmationMessage, message_id)
+            assert message is not None
+            assert message.attempt_count == message.max_attempts == 1
+            assert message.next_enqueue_at is None
+    finally:
+        _delete_committed_appointment(session_factory, appointment_id)
+
+
 def test_duplicate_delivery_creates_one_valid_attempt(
     database_engine: Engine,
     test_settings: Settings,
@@ -152,6 +178,7 @@ def _create_committed_message(
     phone: str,
     status: MessageStatus = MessageStatus.PENDING,
     attempt_count: int = 0,
+    max_attempts: int = 3,
 ) -> tuple[UUID, UUID]:
     with session_factory() as session:
         appointment = Appointment(
@@ -167,7 +194,7 @@ def _create_committed_message(
             appointment_id=appointment.id,
             status=status,
             attempt_count=attempt_count,
-            max_attempts=3,
+            max_attempts=max_attempts,
             enqueued_at=datetime.now(UTC),
             correlation_id=uuid4().hex,
         )

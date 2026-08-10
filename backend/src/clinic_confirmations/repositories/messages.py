@@ -13,8 +13,10 @@ from clinic_confirmations.domain.enums import AttemptResult, MessageStatus
 @dataclass(frozen=True, slots=True)
 class ClaimedMessage:
     id: UUID
+    appointment_id: UUID
     phone: str
     attempt_number: int
+    max_attempts: int
     processing_token: UUID
 
 
@@ -98,13 +100,14 @@ class MessageRepository:
             .returning(
                 ConfirmationMessage.appointment_id,
                 ConfirmationMessage.attempt_count,
+                ConfirmationMessage.max_attempts,
             )
         )
         claimed = self._session.execute(statement).one_or_none()
         if claimed is None:
             return None
 
-        appointment_id, attempt_number = claimed
+        appointment_id, attempt_number, max_attempts = claimed
         phone = self._session.scalar(
             select(Appointment.phone).where(Appointment.id == appointment_id)
         )
@@ -123,8 +126,10 @@ class MessageRepository:
         self._session.commit()
         return ClaimedMessage(
             id=message_id,
+            appointment_id=appointment_id,
             phone=phone,
             attempt_number=attempt_number,
+            max_attempts=max_attempts,
             processing_token=processing_token,
         )
 
@@ -168,7 +173,7 @@ class MessageRepository:
         processing_token: UUID,
         *,
         error: str,
-        next_retry_at: datetime,
+        next_retry_at: datetime | None,
         now: datetime,
     ) -> bool:
         updated_id = self._session.scalar(

@@ -15,6 +15,7 @@ from clinic_confirmations.sender.base import MessageSender
 class ProcessingResult:
     claimed: bool
     status: MessageStatus | None
+    appointment_id: UUID | None = None
     attempt_number: int | None = None
     finalized: bool = False
 
@@ -47,13 +48,15 @@ def process_message(
     except Exception as exc:
         error = str(exc) or type(exc).__name__
         completed_at = current_time if now is not None else datetime.now(UTC)
-        retry_at = completed_at + timedelta(
-            seconds=retry_delay_seconds(
-                attempt=claimed.attempt_number,
-                base=settings.retry_backoff_base_seconds,
-                maximum=settings.retry_backoff_max_seconds,
+        retry_at = None
+        if claimed.attempt_number < claimed.max_attempts:
+            retry_at = completed_at + timedelta(
+                seconds=retry_delay_seconds(
+                    attempt=claimed.attempt_number,
+                    base=settings.retry_backoff_base_seconds,
+                    maximum=settings.retry_backoff_max_seconds,
+                )
             )
-        )
         with session_factory() as session:
             finalized = MessageRepository(session).finalize_failure(
                 claimed.id,
@@ -65,6 +68,7 @@ def process_message(
         return ProcessingResult(
             claimed=True,
             status=MessageStatus.FAILED if finalized else MessageStatus.PROCESSING,
+            appointment_id=claimed.appointment_id,
             attempt_number=claimed.attempt_number,
             finalized=finalized,
         )
@@ -78,6 +82,7 @@ def process_message(
     return ProcessingResult(
         claimed=True,
         status=MessageStatus.SENT if finalized else MessageStatus.PROCESSING,
+        appointment_id=claimed.appointment_id,
         attempt_number=claimed.attempt_number,
         finalized=finalized,
     )

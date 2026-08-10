@@ -57,6 +57,7 @@ it("uploads the CSV and shows partial import errors", async () => {
   await user.upload(screen.getByLabelText("Arquivo CSV"), csvFile());
   await user.click(screen.getByRole("button", { name: "Importar agenda" }));
 
+  expect(await screen.findByText("2 linhas processadas")).toBeInTheDocument();
   expect(await screen.findByText("1 importada")).toBeInTheDocument();
   expect(screen.getByText("1 rejeitada")).toBeInTheDocument();
   expect(screen.getByText("Linha 3")).toBeInTheDocument();

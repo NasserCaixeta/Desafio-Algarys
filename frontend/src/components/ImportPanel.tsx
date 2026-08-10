@@ -17,7 +17,10 @@ export function ImportPanel() {
   const importMutation = useImportAppointments();
 
   function selectFile(nextFile: File | null) {
-    if (nextFile) setFile(nextFile);
+    if (!nextFile) return;
+    setFile(nextFile);
+    setReport(null);
+    importMutation.reset();
   }
 
   function submit() {
@@ -73,6 +76,9 @@ export function ImportPanel() {
       {report ? (
         <div className="import-report" aria-live="polite">
           <div className="summary-grid">
+            <strong>
+              {summaryLabel(report.summary.total_rows, "linha processada", "linhas processadas")}
+            </strong>
             <strong>{summaryLabel(report.summary.imported, "importada", "importadas")}</strong>
             <strong>{summaryLabel(report.summary.rejected, "rejeitada", "rejeitadas")}</strong>
             <strong>

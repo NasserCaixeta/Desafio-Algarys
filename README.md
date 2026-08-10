@@ -390,7 +390,7 @@ tentativa simples e outra `failed → sent`, registra resposta e confere o filtr
 
 `.github/workflows/ci.yml` roda em todo push e pull request:
 
-1. backend: cache pip, Ruff, mypy, upgrade/downgrade/re-upgrade, 120 testes e cobertura mínima 90%;
+1. backend: cache pip, Ruff, mypy, upgrade/downgrade/re-upgrade, 123 testes e cobertura mínima 90%;
 2. frontend: cache npm, ESLint, typecheck, 17 testes com cobertura e build;
 3. containers: valida os dois Compose, constrói imagens e executa o smoke completo;
 4. em falha do smoke, publica os logs dos containers e sempre remove os volumes do runner.
@@ -423,7 +423,7 @@ dependências no Compose são condicionadas à saúde ou à conclusão da migrat
 API e eventos próprios do worker são JSON por linha, por exemplo:
 
 ```json
-{"service":"worker","message_id":"...","correlation_id":"...","attempt_number":2,"event":"message_processing_completed","level":"info","timestamp":"..."}
+{"service":"worker","message_id":"...","appointment_id":"...","correlation_id":"...","attempt_number":2,"event":"message_processing_completed","level":"info","timestamp":"..."}
 ```
 
 A API aceita ou gera `X-Request-ID`, devolve o header e o persiste como `correlation_id` da mensagem.
@@ -469,7 +469,10 @@ aplicação. Não são logados DSNs, senhas, conteúdo do CSV ou telefone comple
 - Redis usa AOF, mas não é uma fila com garantia exatamente uma vez. Se uma tarefa já marcada como
   enfileirada for perdida por perda total do Redis, a mensagem pode permanecer `pending`; um outbox
   dedicado ou lease de publicação seria a evolução natural.
-- A estratégia fornece “at least once” com efeito idempotente, não exactly-once físico.
+- A estratégia fornece entrega “at least once”, não exactly-once físico. O banco impede duas
+  tentativas válidas simultâneas, mas uma queda depois de o provedor externo aceitar o envio e antes
+  da finalização no PostgreSQL pode causar reenvio após o lease. Uma integração real deve passar
+  `message_id` como chave de idempotência ao provedor e reconciliar pelo identificador externo.
 - Não há DLQ, painel de métricas, alertas ou rate limiting.
 - Não há autenticação; em produção a rede/UI deve ser restrita até RBAC ser implementado.
 - O telefone é validado como brasileiro; internacionalização exigiria regra explícita por país.

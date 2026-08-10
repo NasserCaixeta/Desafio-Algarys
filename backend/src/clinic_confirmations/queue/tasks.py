@@ -83,6 +83,9 @@ def process_message_task(message_id: str, correlation_id: str) -> dict[str, obje
         payload: dict[str, object] = {
             "claimed": result.claimed,
             "status": result.status.value if result.status is not None else None,
+            "appointment_id": (
+                str(result.appointment_id) if result.appointment_id is not None else None
+            ),
             "attempt_number": result.attempt_number,
             "finalized": result.finalized,
             "correlation_id": correlation_id,
@@ -91,6 +94,7 @@ def process_message_task(message_id: str, correlation_id: str) -> dict[str, obje
             "message_processing_completed",
             claimed=result.claimed,
             status=payload["status"],
+            appointment_id=payload["appointment_id"],
             attempt_number=result.attempt_number,
             finalized=result.finalized,
         )

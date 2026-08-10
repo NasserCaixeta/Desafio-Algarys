@@ -20,7 +20,13 @@ function needsPolling(data: AppointmentPage | undefined): boolean {
 
 export function useAppointments(filters: AppointmentFilters) {
   return useQuery({
-    queryKey: ["appointments", filters.date, filters.status, filters.page],
+    queryKey: [
+      "appointments",
+      filters.date,
+      filters.status,
+      filters.page,
+      filters.pageSize,
+    ],
     queryFn: () => api.listAppointments(filters),
     placeholderData: keepPreviousData,
     refetchInterval: (query) =>

@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from clinic_confirmations.domain.errors import (
     AppointmentNotFoundError,
@@ -46,6 +47,20 @@ def _error_response(
 
 
 def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(StarletteHTTPException)
+    async def framework_http_error(
+        request: Request, exc: StarletteHTTPException
+    ) -> JSONResponse:
+        codes = {404: "not_found", 405: "method_not_allowed"}
+        message = exc.detail if isinstance(exc.detail, str) else "Erro ao processar a requisição."
+        return _error_response(
+            request,
+            status_code=exc.status_code,
+            code=codes.get(exc.status_code, "http_error"),
+            message=message,
+            details={} if isinstance(exc.detail, str) else exc.detail,
+        )
+
     @app.exception_handler(MessageNotFoundError)
     async def message_not_found(request: Request, exc: MessageNotFoundError) -> JSONResponse:
         return _error_response(
@@ -149,3 +164,16 @@ def register_error_handlers(app: FastAPI) -> None:
             message="A requisição possui dados inválidos.",
             details=exc.errors(),
         )
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, _: Exception) -> JSONResponse:
+        response = _error_response(
+            request,
+            status_code=500,
+            code="internal_server_error",
+            message="Não foi possível processar a requisição.",
+        )
+        # ServerErrorMiddleware renders this response outside the request middleware,
+        # so the correlation header must be attached here as well.
+        response.headers["X-Request-ID"] = _request_id(request)
+        return response
