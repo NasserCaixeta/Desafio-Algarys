@@ -5,7 +5,12 @@ from clinic_confirmations.core.config import Settings
 
 
 def create_database_engine(settings: Settings) -> Engine:
-    return create_engine(settings.database_url, pool_pre_ping=True)
+    return create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        pool_timeout=settings.dependency_timeout_seconds,
+        connect_args={"connect_timeout": settings.dependency_timeout_seconds},
+    )
 
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:
