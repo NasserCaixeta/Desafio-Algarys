@@ -19,6 +19,7 @@ htmlcov/
 node_modules/
 dist/
 coverage/
+.node-localstorage
 
 # Runtime data
 postgres_data/
