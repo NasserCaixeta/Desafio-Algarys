@@ -42,3 +42,18 @@ class AppointmentNotFoundError(LookupError):
 
     def __init__(self) -> None:
         super().__init__("Agendamento não encontrado.")
+
+
+class MessageNotFoundError(LookupError):
+    def __init__(self) -> None:
+        super().__init__("Mensagem não encontrada.")
+
+
+class RetryLimitReachedError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("O limite de tentativas foi atingido.")
+
+
+class RetryNotAllowedError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("A mensagem não está em estado de falha.")

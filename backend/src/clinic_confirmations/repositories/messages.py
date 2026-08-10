@@ -150,7 +150,7 @@ class MessageRepository:
             .returning(ConfirmationMessage.id)
         )
         if updated_id is None:
-            self._session.rollback()
+            self._session.commit()
             return False
         self._complete_attempt(
             message_id,
@@ -187,7 +187,7 @@ class MessageRepository:
             .returning(ConfirmationMessage.id)
         )
         if updated_id is None:
-            self._session.rollback()
+            self._session.commit()
             return False
         self._complete_attempt(
             message_id,
@@ -202,6 +202,58 @@ class MessageRepository:
     def get_status(self, message_id: UUID) -> MessageStatus | None:
         return self._session.scalar(
             select(ConfirmationMessage.status).where(ConfirmationMessage.id == message_id)
+        )
+
+    def lock_by_id(self, message_id: UUID) -> ConfirmationMessage | None:
+        return self._session.scalar(
+            select(ConfirmationMessage)
+            .where(ConfirmationMessage.id == message_id)
+            .with_for_update()
+        )
+
+    def lock_due_failed(
+        self,
+        *,
+        now: datetime,
+        batch_size: int,
+    ) -> list[ConfirmationMessage]:
+        statement = (
+            select(ConfirmationMessage)
+            .where(ConfirmationMessage.status == MessageStatus.FAILED)
+            .where(ConfirmationMessage.attempt_count < ConfirmationMessage.max_attempts)
+            .where(ConfirmationMessage.next_enqueue_at <= now)
+            .order_by(ConfirmationMessage.next_enqueue_at, ConfirmationMessage.id)
+            .with_for_update(skip_locked=True)
+            .limit(batch_size)
+        )
+        return list(self._session.scalars(statement).all())
+
+    def lock_stale_processing(
+        self,
+        *,
+        started_before: datetime,
+        batch_size: int,
+    ) -> list[ConfirmationMessage]:
+        statement = (
+            select(ConfirmationMessage)
+            .where(ConfirmationMessage.status == MessageStatus.PROCESSING)
+            .where(ConfirmationMessage.processing_started_at <= started_before)
+            .order_by(ConfirmationMessage.processing_started_at, ConfirmationMessage.id)
+            .with_for_update(skip_locked=True)
+            .limit(batch_size)
+        )
+        return list(self._session.scalars(statement).all())
+
+    def get_processing_attempt(
+        self,
+        message_id: UUID,
+        processing_token: UUID,
+    ) -> MessageAttempt | None:
+        return self._session.scalar(
+            select(MessageAttempt)
+            .where(MessageAttempt.message_id == message_id)
+            .where(MessageAttempt.processing_token == processing_token)
+            .where(MessageAttempt.result == AttemptResult.PROCESSING)
         )
 
     def _complete_attempt(

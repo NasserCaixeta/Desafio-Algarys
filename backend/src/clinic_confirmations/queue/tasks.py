@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from clinic_confirmations.core.config import get_settings
@@ -6,6 +7,10 @@ from clinic_confirmations.queue.celery_app import celery_app
 from clinic_confirmations.queue.publisher import reconcile_enqueue
 from clinic_confirmations.sender.simulated import SimulatedSender
 from clinic_confirmations.services.message_processing import process_message
+from clinic_confirmations.services.retry import (
+    recover_stale_processing,
+    schedule_due_retries,
+)
 
 
 def reconcile_enqueue_task() -> int:
@@ -14,6 +19,18 @@ def reconcile_enqueue_task() -> int:
     session_factory = create_session_factory(engine)
     try:
         with session_factory() as session:
+            now = datetime.now(UTC)
+            recover_stale_processing(
+                session,
+                now=now,
+                lease_seconds=settings.processing_lease_seconds,
+                batch_size=settings.reconciliation_batch_size,
+            )
+            schedule_due_retries(
+                session,
+                now=now,
+                batch_size=settings.reconciliation_batch_size,
+            )
             return reconcile_enqueue(
                 session,
                 celery_app,

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from clinic_confirmations.core.config import Settings
 from clinic_confirmations.db.models import ConfirmationMessage
 from clinic_confirmations.domain.enums import MessageStatus
+from clinic_confirmations.domain.transitions import retry_delay_seconds
 from clinic_confirmations.repositories.messages import MessageRepository
 
 
@@ -102,7 +103,11 @@ def _publish_loaded_message(
         message.enqueue_attempts += 1
         message.last_enqueue_error = error
         message.next_enqueue_at = now + timedelta(
-            seconds=_enqueue_backoff_seconds(message.enqueue_attempts, settings)
+            seconds=retry_delay_seconds(
+                attempt=message.enqueue_attempts,
+                base=settings.retry_backoff_base_seconds,
+                maximum=settings.retry_backoff_max_seconds,
+            )
         )
         session.commit()
         return PublicationResult(
@@ -116,13 +121,3 @@ def _publish_loaded_message(
     message.last_enqueue_error = None
     session.commit()
     return PublicationResult(message_id=message.id, published=True)
-
-
-def _enqueue_backoff_seconds(attempt: int, settings: Settings) -> int:
-    exponent = min(max(attempt - 1, 0), 30)
-    base_seconds: int = settings.retry_backoff_base_seconds
-    maximum_seconds: int = settings.retry_backoff_max_seconds
-    return min(
-        base_seconds * (1 << exponent),
-        maximum_seconds,
-    )
