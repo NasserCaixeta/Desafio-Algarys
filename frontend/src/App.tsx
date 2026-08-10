@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { AppointmentStatus } from "./api/types";
 import { AppointmentList } from "./components/AppointmentList";
 import { DashboardFilters } from "./components/DashboardFilters";
+import { ImportPanel } from "./components/ImportPanel";
 import { useAppointments } from "./hooks/useAppointments";
 import { todayInClinicTimezone } from "./utils/format";
 
@@ -29,6 +30,8 @@ export function App() {
         <h1>Confirmação de consultas</h1>
         <p>Acompanhe a agenda e o processamento das mensagens.</p>
       </header>
+
+      <ImportPanel />
 
       <section className="panel" aria-labelledby="agenda-title">
         <div className="panel-heading">
