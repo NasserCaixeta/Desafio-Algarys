@@ -104,6 +104,121 @@ Para rollback, restaure `IMAGE_TAG` para a tag anterior e execute novamente `pul
 Downgrade de schema é uma decisão separada: faça backup, confirme a compatibilidade com a versão
 anterior da aplicação e só então execute o comando Alembic explícito.
 
+## CD automático da main
+
+O workflow `.github/workflows/deploy.yml` é acionado por `workflow_run`, depois que o workflow
+**CI** termina na `main`. Ele ainda verifica que a execução veio de um `push` no próprio
+repositório e que a conclusão foi `success`. Assim, pull requests e execuções com falha não recebem
+segredos de produção nem publicam uma nova versão.
+
+Cada commit aprovado recebe uma tag imutável `sha-<commit-completo>` nas imagens da API, worker e
+frontend. O job `Deploy production` usa o GitHub Environment `production` e acessa a VPS com uma
+chave SSH dedicada. Essa chave possui um comando forçado: não abre shell, não encaminha portas e
+não pertence ao grupo Docker. O entrypoint aceita somente a operação `deploy` com um SHA e sua tag
+correspondente; então chama, por uma regra `sudo` restrita, uma cópia root-owned de
+`deploy/scripts/bootstrap.sh`. O bootstrap:
+
+1. valida SHA, tag, checkout e ausência de mudanças rastreadas;
+2. busca `origin/main` e confirma que o commit pertence à branch;
+3. troca o checkout para o commit testado;
+4. executa `deploy/scripts/deploy.sh`.
+
+O script de deploy usa duas travas contra concorrência: `concurrency: production` no GitHub e
+`flock` na VPS. Ele valida o Compose com a nova tag, baixa as imagens, mantém até cinco dumps locais
+pré-migration, executa a migration e substitui os containers. A conclusão exige PostgreSQL, Redis,
+API, worker, scheduler, frontend e Nginx saudáveis, além de readiness/status internos e liveness
+público.
+
+### Preparar o usuário da VPS
+
+Use um usuário exclusivo em vez de disponibilizar a chave administrativa ao GitHub. Ele não recebe
+senha, shell interativo, acesso ao grupo `docker` nem propriedade sobre o checkout. Dois wrappers
+root-owned limitam sua única operação ao deploy validado deste projeto:
+
+```bash
+sudo adduser --disabled-password --gecos '' clinic-deploy
+sudo -u clinic-deploy install -d -m 0700 /home/clinic-deploy/.ssh
+sudo -u clinic-deploy touch /home/clinic-deploy/.ssh/authorized_keys
+sudo chmod 0600 /home/clinic-deploy/.ssh/authorized_keys
+
+sudo install -m 0755 -o root -g root deploy/scripts/bootstrap.sh \
+  /usr/local/sbin/clinic-confirmations-deploy
+sudo install -m 0755 -o root -g root deploy/scripts/ssh-entrypoint.sh \
+  /usr/local/sbin/clinic-confirmations-ssh-entrypoint
+
+echo 'clinic-deploy ALL=(root) NOPASSWD: /usr/local/sbin/clinic-confirmations-deploy' \
+  | sudo tee /etc/sudoers.d/clinic-confirmations-deploy >/dev/null
+sudo chmod 0440 /etc/sudoers.d/clinic-confirmations-deploy
+sudo visudo -cf /etc/sudoers.d/clinic-confirmations-deploy
+```
+
+Gere uma chave Ed25519 exclusiva em uma máquina administrativa:
+
+```bash
+ssh-keygen -t ed25519 -f ./clinic-confirmations-deploy -C 'github-actions-production'
+```
+
+Acrescente a chave pública com as restrições na própria linha de `authorized_keys`:
+
+```text
+restrict,command="/usr/local/sbin/clinic-confirmations-ssh-entrypoint" ssh-ed25519 AAAA... github-actions-production
+```
+
+Mesmo que essa chave seja usada fora do Actions, o SSH ignora o comando solicitado e executa
+somente o entrypoint. O entrypoint valida os argumentos e a regra de `sudo` não autoriza outros
+binários.
+
+Antes de cadastrar `known_hosts`, compare o fingerprint retornado pela VPS com o fingerprint da
+chave coletada. Não aceite uma chave de host sem essa verificação.
+
+### Configurar o GitHub Environment
+
+Crie o Environment `production` e limite a origem do deploy à branch `main`. Cadastre estas
+variáveis de ambiente:
+
+| Variável | Exemplo |
+| --- | --- |
+| `VPS_HOST` | `203.0.113.10` |
+| `VPS_PORT` | `22` |
+| `VPS_USER` | `clinic-deploy` |
+| `PRODUCTION_URL` | `https://clinica.example.com` |
+
+Cadastre como secrets do Environment:
+
+| Secret | Conteúdo |
+| --- | --- |
+| `VPS_SSH_PRIVATE_KEY` | chave privada Ed25519 exclusiva do workflow |
+| `VPS_SSH_KNOWN_HOSTS` | linha verificada do host retornada por `ssh-keyscan` |
+
+Com GitHub CLI autenticado, os valores podem ser enviados sem gravá-los no repositório:
+
+```bash
+gh secret set VPS_SSH_PRIVATE_KEY --env production < ./clinic-confirmations-deploy
+gh secret set VPS_SSH_KNOWN_HOSTS --env production < ./known_hosts.production
+gh variable set VPS_HOST --env production --body '<IP_OU_HOST>'
+gh variable set VPS_PORT --env production --body '22'
+gh variable set VPS_USER --env production --body 'clinic-deploy'
+gh variable set PRODUCTION_URL --env production --body 'https://clinica.example.com'
+```
+
+As senhas do PostgreSQL e do Basic Auth, o login do GHCR e os certificados permanecem apenas na
+VPS. O workflow não precisa desses valores. Se as imagens forem privadas, autentique o Docker da
+VPS uma vez com um token limitado a `read:packages`.
+
+### Rollback do CD
+
+Se migration, inicialização ou healthcheck falhar, o script restaura automaticamente o checkout,
+`IMAGE_TAG`, `APP_VERSION` e containers da versão anterior. Os arquivos de estado e backups ficam
+em `.deploy/`, ignorado pelo Git. Os logs do workflow mostram se o rollback também ficou saudável.
+
+O rollback não executa `alembic downgrade` nem restaura o dump automaticamente. Uma migration nova
+deve permanecer compatível com a imagem anterior para que o rollback de aplicação seja seguro. Se
+isso não for possível, use uma migration expand/contract e remova estruturas antigas somente em
+uma entrega posterior.
+
+Para acompanhar uma entrega, abra **Actions → CD**. O deployment também aparece no Environment
+`production`, associado ao SHA exato que está na VPS.
+
 ## 7. Fazer backup e restauração
 
 Backup em formato customizado, ajustando usuário e banco caso tenham sido alterados:

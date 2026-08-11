@@ -24,6 +24,7 @@ coverage/
 # Runtime data
 postgres_data/
 redis_data/
+.deploy/
 *.pid
 *.log
 

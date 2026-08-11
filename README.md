@@ -314,7 +314,7 @@ aplicação por mocks de implementação.
 O smoke reconstrói os serviços, importa o exemplo, lista, dispara, aguarda o worker, verifica envio
 simples e `failed → sent`, registra resposta e confere o filtro `confirmed`.
 
-## CI e publicação de imagens
+## CI, CD e publicação de imagens
 
 `.github/workflows/ci.yml` roda em pushes e pull requests:
 
@@ -329,6 +329,17 @@ começa depois que backend e frontend passam.
 `.github/workflows/publish.yml` publica as imagens da API, worker e frontend no GHCR em tags `v*`
 ou por disparo manual. O procedimento de publicação e atualização está no
 [guia operacional](deploy/README.md#ghcr).
+
+Depois de um `push` na `main`, `.github/workflows/deploy.yml` aguarda o workflow **CI** terminar.
+Somente um CI verde, originado por `push` no próprio repositório, pode publicar imagens imutáveis
+`sha-<commit>` e iniciar o deploy de `production`. Pull requests nunca recebem as credenciais da
+VPS e não disparam o CD.
+
+O deploy usa uma chave SSH exclusiva, é serializado pelo `concurrency` do GitHub e por `flock` na
+VPS, cria um backup local antes da migration, atualiza os containers e verifica todos os
+healthchecks. Se uma etapa falhar, restaura o checkout e as imagens anteriores. Downgrade de schema
+e restauração do banco nunca são automáticos, pois poderiam descartar dados. Configuração inicial,
+segredos e operação do rollback estão no [guia de CD](deploy/README.md#cd-automatico-da-main).
 
 ## Healthchecks e logs
 
@@ -378,7 +389,8 @@ do desafio.
   ou lease de publicação seria a evolução natural.
 - Não há DLQ, métricas, alertas, rate limiting ou autenticação.
 - O telefone é validado como brasileiro; internacionalização exigiria regra por país.
-- Backup e renovação TLS dependem de agendamento e monitoramento da VPS.
+- O CD mantém cinco backups locais anteriores às migrations; cópia externa, teste de restauração e
+  renovação TLS ainda dependem de agendamento e monitoramento da VPS.
 - Imagem e schema incompatíveis podem impedir rollback; produção exige migrations expand/contract.
 
 DNS não propagado, portas 80/443 bloqueadas, falta de disco, relógio incorreto e segredos mal
