@@ -4,9 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { App } from "../App";
-import type { AppointmentPage } from "../api/types";
-import { server } from "../test/server";
+import { App } from "./App";
+import type { AppointmentPage } from "./api/types";
+import { server } from "./test/server";
 
 const page: AppointmentPage = {
   items: [
@@ -107,7 +107,10 @@ function serveAppointments(
   );
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 it("confirms dispatch for the whole day and reports created messages", async () => {
   serveAppointments();
@@ -209,7 +212,7 @@ it("selects every eligible appointment visible on the page", async () => {
   expect(screen.getByRole("button", { name: "Enviar para 2 selecionados" })).toBeEnabled();
 });
 
-it("shows attempts inside the delivery status and distinguishes temporary and final failures", async () => {
+it("shows a sent message without irrelevant attempt details", async () => {
   serveAppointments();
   renderApp();
 
@@ -218,13 +221,23 @@ it("shows attempts inside the delivery status and distinguishes temporary and fi
   expect(within(sentRow).getByRole("button", { name: "Paciente recusou" })).toBeEnabled();
   expect(within(sentRow).getByText("Enviada")).toBeInTheDocument();
   expect(within(sentRow).queryByText(/tentativa/i)).not.toBeInTheDocument();
+});
 
-  const exhaustedRow = screen.getByRole("row", { name: /Beto Lima/ });
+it("shows an exhausted failure without enabling another retry", async () => {
+  serveAppointments();
+  renderApp();
+
+  const exhaustedRow = await screen.findByRole("row", { name: /Beto Lima/ });
   expect(within(exhaustedRow).getByText("Falha definitiva")).toBeInTheDocument();
   expect(within(exhaustedRow).getByText("3 tentativas de envio realizadas")).toBeInTheDocument();
   expect(within(exhaustedRow).getByRole("button", { name: "Limite atingido" })).toBeDisabled();
+});
 
-  const retryableRow = screen.getByRole("row", { name: /Carla Melo/ });
+it("shows retry details and action for a temporary failure", async () => {
+  serveAppointments();
+  renderApp();
+
+  const retryableRow = await screen.findByRole("row", { name: /Carla Melo/ });
   expect(within(retryableRow).getByText("Falha temporária")).toBeInTheDocument();
   expect(within(retryableRow).getByText("Tentativa de envio 1 de 3")).toBeInTheDocument();
   expect(within(retryableRow).getByText("Nova tentativa automática agendada")).toBeInTheDocument();
@@ -291,6 +304,7 @@ it.each([
 });
 
 it("polls while a message still has asynchronous work", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   const requests = { value: 0 };
   server.use(
     http.get("*/api/v1/appointments", () => {
@@ -313,5 +327,9 @@ it("polls while a message still has asynchronous work", async () => {
   expect(
     within(processingRow).getByText("Tentativa de envio 1 de 3 em andamento"),
   ).toBeInTheDocument();
-  await waitFor(() => expect(requests.value).toBeGreaterThan(1), { timeout: 3_000 });
+  expect(requests.value).toBe(1);
+
+  await vi.advanceTimersByTimeAsync(2_000);
+
+  await waitFor(() => expect(requests.value).toBeGreaterThan(1));
 });

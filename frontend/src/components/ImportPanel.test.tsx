@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpResponse, delay, http } from "msw";
+import { HttpResponse, http } from "msw";
 
 import { ImportPanel } from "./ImportPanel";
 import { server } from "../test/server";
@@ -78,9 +78,13 @@ it("accepts a file dropped on the labeled drop zone", () => {
 });
 
 it("disables submit and announces progress while uploading", async () => {
+  let completeUpload = () => {};
+  const uploadPending = new Promise<void>((resolve) => {
+    completeUpload = resolve;
+  });
   server.use(
     http.post("*/api/v1/imports/appointments", async () => {
-      await delay(100);
+      await uploadPending;
       return HttpResponse.json({
         summary: { total_rows: 1, imported: 1, rejected: 0, duplicates: 0 },
         appointment_dates: ["2026-08-11"],
@@ -97,10 +101,31 @@ it("disables submit and announces progress while uploading", async () => {
   await user.click(screen.getByRole("button", { name: "Importar agenda" }));
 
   expect(screen.getByRole("button", { name: "Importando…" })).toBeDisabled();
+  completeUpload();
   expect(await screen.findByText("1 importada")).toBeInTheDocument();
 });
 
-it("shows duplicate summary and standardized API failure", async () => {
+it("shows the duplicate import summary", async () => {
+  server.use(
+    http.post("*/api/v1/imports/appointments", () =>
+      HttpResponse.json({
+        summary: { total_rows: 2, imported: 0, rejected: 0, duplicates: 2 },
+        appointment_dates: ["2026-08-11"],
+        imported_lines: [],
+        duplicate_lines: [2, 3],
+        errors: [],
+      }),
+    ),
+  );
+  const user = userEvent.setup();
+  renderImportPanel();
+  await user.upload(screen.getByLabelText("Arquivo CSV"), csvFile());
+
+  await user.click(screen.getByRole("button", { name: "Importar agenda" }));
+  expect(await screen.findByText("2 duplicadas")).toBeInTheDocument();
+});
+
+it("clears the previous report when a repeated import fails", async () => {
   let attempt = 0;
   server.use(
     http.post("*/api/v1/imports/appointments", () => {
@@ -133,6 +158,7 @@ it("shows duplicate summary and standardized API failure", async () => {
 
   await user.click(screen.getByRole("button", { name: "Importar agenda" }));
   expect(await screen.findByText("2 duplicadas")).toBeInTheDocument();
+
   await user.click(screen.getByRole("button", { name: "Importar agenda" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Arquivo muito grande");

@@ -396,8 +396,8 @@ tentativa simples e outra `failed → sent`, registra resposta e confere o filtr
 
 `.github/workflows/ci.yml` roda em todo push e pull request:
 
-1. backend: cache pip, Ruff, mypy, upgrade/downgrade/re-upgrade, 131 testes e cobertura mínima 90%;
-2. frontend: cache npm, ESLint, typecheck, 22 testes com cobertura e build;
+1. backend: cache pip, Ruff, mypy, upgrade/downgrade/re-upgrade, 129 testes e cobertura mínima 90%;
+2. frontend: cache npm, ESLint, typecheck, 25 testes com cobertura e build;
 3. containers: valida os dois Compose, constrói imagens e executa o smoke completo;
 4. em falha do smoke, publica os logs dos containers e sempre remove os volumes do runner.
 

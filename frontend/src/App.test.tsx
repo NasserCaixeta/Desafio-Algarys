@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpResponse, delay, http } from "msw";
+import { HttpResponse, http } from "msw";
 
 import { App } from "./App";
 import type { AppointmentPage } from "./api/types";
@@ -72,9 +72,13 @@ it("renders appointments and sends selected filters", async () => {
 });
 
 it("renders loading and empty states", async () => {
+  let finishLoading = () => {};
+  const requestPending = new Promise<void>((resolve) => {
+    finishLoading = resolve;
+  });
   server.use(
     http.get("*/api/v1/appointments", async () => {
-      await delay(100);
+      await requestPending;
       return HttpResponse.json({
         items: [],
         pagination: { page: 1, page_size: 20, total: 0, total_pages: 0 },
@@ -85,6 +89,7 @@ it("renders loading and empty states", async () => {
   renderApp();
 
   expect(screen.getByRole("status", { name: "Carregando agenda" })).toBeInTheDocument();
+  finishLoading();
   expect(await screen.findByText("Nenhum agendamento encontrado")).toBeInTheDocument();
 });
 
