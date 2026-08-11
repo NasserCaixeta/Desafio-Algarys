@@ -118,7 +118,7 @@ start_application() {
   compose up -d --no-deps api worker scheduler frontend
   wait_for_services 180 postgres redis api worker scheduler frontend
 
-  compose up -d --no-deps nginx
+  compose up -d --no-deps --force-recreate nginx
   wait_for_services 120 postgres redis api worker scheduler frontend nginx
   verify_application
 }
@@ -163,7 +163,7 @@ rollback() {
     compose up -d postgres redis || rollback_failed=1
     compose up -d --no-deps api worker scheduler frontend || rollback_failed=1
     wait_for_services 180 postgres redis api worker scheduler frontend || rollback_failed=1
-    compose up -d --no-deps nginx || rollback_failed=1
+    compose up -d --no-deps --force-recreate nginx || rollback_failed=1
     wait_for_services 120 postgres redis api worker scheduler frontend nginx || rollback_failed=1
     verify_application || rollback_failed=1
     if [[ $rollback_failed -eq 0 ]]; then

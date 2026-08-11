@@ -335,11 +335,13 @@ Somente um CI verde, originado por `push` no próprio repositório, pode publica
 `sha-<commit>` e iniciar o deploy de `production`. Pull requests nunca recebem as credenciais da
 VPS e não disparam o CD.
 
-O deploy usa uma chave SSH exclusiva, é serializado pelo `concurrency` do GitHub e por `flock` na
-VPS, cria um backup local antes da migration, atualiza os containers e verifica todos os
-healthchecks. Se uma etapa falhar, restaura o checkout e as imagens anteriores. Downgrade de schema
-e restauração do banco nunca são automáticos, pois poderiam descartar dados. Configuração inicial,
-segredos e operação do rollback estão no [guia de CD](deploy/README.md#cd-automatico-da-main).
+O deploy é pull-based: um timer root-owned na VPS consulta a `main` por HTTPS e só aceita o commit
+quando as três imagens `sha-<commit>` existem no GHCR. O processo é serializado por `flock`, cria
+backup local antes da migration, atualiza os containers e verifica todos os healthchecks. O job de
+CD aguarda `/status` confirmar o SHA efetivamente implantado. Se uma etapa falhar, o servidor
+restaura checkout e imagens anteriores. Downgrade de schema e restauração do banco nunca são
+automáticos, pois poderiam descartar dados. Configuração e rollback estão no
+[guia de CD](deploy/README.md#cd-automatico-da-main).
 
 ## Healthchecks e logs
 

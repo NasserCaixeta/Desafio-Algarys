@@ -112,64 +112,52 @@ repositório e que a conclusão foi `success`. Assim, pull requests e execuçõe
 segredos de produção nem publicam uma nova versão.
 
 Cada commit aprovado recebe uma tag imutável `sha-<commit-completo>` nas imagens da API, worker e
-frontend. O job `Deploy production` usa o GitHub Environment `production` e acessa a VPS com uma
-chave SSH dedicada. Essa chave possui um comando forçado: não abre shell, não encaminha portas e
-não pertence ao grupo Docker. O entrypoint aceita somente a operação `deploy` com um SHA e sua tag
-correspondente; então chama, por uma regra `sudo` restrita, uma cópia root-owned de
-`deploy/scripts/bootstrap.sh`. O bootstrap:
+frontend. O deploy é pull-based: a VPS não expõe um endpoint de implantação e o GitHub não precisa
+alcançar o SSH. Um timer root-owned consulta `origin/main` por HTTPS e só aceita a versão quando as
+três imagens daquele SHA já existem no GHCR. Se o CI ainda estiver executando ou uma publicação
+estiver incompleta, o watcher termina sem alterar a aplicação e tenta novamente no minuto seguinte.
 
-1. valida SHA, tag, checkout e ausência de mudanças rastreadas;
-2. busca `origin/main` e confirma que o commit pertence à branch;
-3. troca o checkout para o commit testado;
-4. executa `deploy/scripts/deploy.sh`.
+Quando encontra uma release completa, `deploy/scripts/bootstrap.sh` confirma que o commit pertence
+à `main`, recusa versões anteriores à atualmente implantada e executa o script versionado de
+deploy. `flock` impede concorrência na VPS. O processo valida o Compose, mantém até cinco dumps
+locais pré-migration, executa a migration e substitui os containers. A conclusão exige PostgreSQL,
+Redis, API, worker, scheduler, frontend e Nginx saudáveis, além de readiness/status internos e
+liveness público.
 
-O script de deploy usa duas travas contra concorrência: `concurrency: production` no GitHub e
-`flock` na VPS. Ele valida o Compose com a nova tag, baixa as imagens, mantém até cinco dumps locais
-pré-migration, executa a migration e substitui os containers. A conclusão exige PostgreSQL, Redis,
-API, worker, scheduler, frontend e Nginx saudáveis, além de readiness/status internos e liveness
-público.
+O job `Verify production deployment` consulta `/status` com Basic Auth até a API informar
+`APP_VERSION=sha-<commit>`. Portanto, o workflow só fica verde depois que a versão testada está
+efetivamente em execução, não apenas depois de publicar imagens.
 
-### Preparar o usuário da VPS
+### Instalar o watcher na VPS
 
-Use um usuário exclusivo em vez de disponibilizar a chave administrativa ao GitHub. Ele não recebe
-senha, shell interativo, acesso ao grupo `docker` nem propriedade sobre o checkout. Dois wrappers
-root-owned limitam sua única operação ao deploy validado deste projeto:
+Instale os scripts e units como root; os arquivos do repositório não substituem automaticamente
+essas cópias privilegiadas:
 
 ```bash
-sudo adduser --disabled-password --gecos '' clinic-deploy
-sudo -u clinic-deploy install -d -m 0700 /home/clinic-deploy/.ssh
-sudo -u clinic-deploy touch /home/clinic-deploy/.ssh/authorized_keys
-sudo chmod 0600 /home/clinic-deploy/.ssh/authorized_keys
-
+cd /opt/clinic-confirmations
 sudo install -m 0755 -o root -g root deploy/scripts/bootstrap.sh \
   /usr/local/sbin/clinic-confirmations-deploy
-sudo install -m 0755 -o root -g root deploy/scripts/ssh-entrypoint.sh \
-  /usr/local/sbin/clinic-confirmations-ssh-entrypoint
-
-echo 'clinic-deploy ALL=(root) NOPASSWD: /usr/local/sbin/clinic-confirmations-deploy' \
-  | sudo tee /etc/sudoers.d/clinic-confirmations-deploy >/dev/null
-sudo chmod 0440 /etc/sudoers.d/clinic-confirmations-deploy
-sudo visudo -cf /etc/sudoers.d/clinic-confirmations-deploy
+sudo install -m 0755 -o root -g root deploy/scripts/watch-release.sh \
+  /usr/local/sbin/clinic-confirmations-watch-release
+sudo install -m 0644 -o root -g root deploy/systemd/clinic-confirmations-cd.service \
+  /etc/systemd/system/clinic-confirmations-cd.service
+sudo install -m 0644 -o root -g root deploy/systemd/clinic-confirmations-cd.timer \
+  /etc/systemd/system/clinic-confirmations-cd.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now clinic-confirmations-cd.timer
 ```
 
-Gere uma chave Ed25519 exclusiva em uma máquina administrativa:
+Valide o agendamento e uma execução manual:
 
 ```bash
-ssh-keygen -t ed25519 -f ./clinic-confirmations-deploy -C 'github-actions-production'
+systemctl list-timers clinic-confirmations-cd.timer
+sudo systemctl start clinic-confirmations-cd.service
+journalctl -u clinic-confirmations-cd.service --since today
 ```
 
-Acrescente a chave pública com as restrições na própria linha de `authorized_keys`:
-
-```text
-restrict,command="/usr/local/sbin/clinic-confirmations-ssh-entrypoint" ssh-ed25519 AAAA... github-actions-production
-```
-
-Mesmo que essa chave seja usada fora do Actions, o SSH ignora o comando solicitado e executa
-somente o entrypoint. O entrypoint valida os argumentos e a regra de `sudo` não autoriza outros
-binários.
-
-Antes de cadastrar `known_hosts`, compare o fingerprint retornado pela VPS com o fingerprint da
-chave coletada. Não aceite uma chave de host sem essa verificação.
+O timer usa somente conexões de saída HTTPS e acesso local ao Docker. Um runner self-hosted não foi
+adotado porque este é um repositório público e código de workflows executado no host aumentaria a
+superfície de ataque da VPS.
 
 ### Configurar o GitHub Environment
 
@@ -178,32 +166,27 @@ variáveis de ambiente:
 
 | Variável | Exemplo |
 | --- | --- |
-| `VPS_HOST` | `203.0.113.10` |
-| `VPS_PORT` | `22` |
-| `VPS_USER` | `clinic-deploy` |
 | `PRODUCTION_URL` | `https://clinica.example.com` |
+| `BASIC_AUTH_USERNAME` | usuário de leitura do ambiente publicado |
 
 Cadastre como secrets do Environment:
 
 | Secret | Conteúdo |
 | --- | --- |
-| `VPS_SSH_PRIVATE_KEY` | chave privada Ed25519 exclusiva do workflow |
-| `VPS_SSH_KNOWN_HOSTS` | linha verificada do host retornada por `ssh-keyscan` |
+| `BASIC_AUTH_PASSWORD` | senha do usuário usado apenas para verificar `/status` |
 
 Com GitHub CLI autenticado, os valores podem ser enviados sem gravá-los no repositório:
 
 ```bash
-gh secret set VPS_SSH_PRIVATE_KEY --env production < ./clinic-confirmations-deploy
-gh secret set VPS_SSH_KNOWN_HOSTS --env production < ./known_hosts.production
-gh variable set VPS_HOST --env production --body '<IP_OU_HOST>'
-gh variable set VPS_PORT --env production --body '22'
-gh variable set VPS_USER --env production --body 'clinic-deploy'
 gh variable set PRODUCTION_URL --env production --body 'https://clinica.example.com'
+gh variable set BASIC_AUTH_USERNAME --env production --body '<USUARIO>'
+gh secret set BASIC_AUTH_PASSWORD --env production
 ```
 
-As senhas do PostgreSQL e do Basic Auth, o login do GHCR e os certificados permanecem apenas na
-VPS. O workflow não precisa desses valores. Se as imagens forem privadas, autentique o Docker da
-VPS uma vez com um token limitado a `read:packages`.
+As senhas do PostgreSQL, o login do GHCR e os certificados permanecem apenas na VPS. O GitHub recebe
+somente a credencial de leitura do proxy necessária para confirmar a versão; ela não concede shell
+nem acesso ao Docker. Se as imagens forem privadas, autentique o Docker da VPS uma vez com um token
+limitado a `read:packages`.
 
 ### Rollback do CD
 

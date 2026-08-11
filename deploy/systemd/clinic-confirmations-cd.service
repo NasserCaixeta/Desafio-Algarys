@@ -1,0 +1,14 @@
+[Unit]
+Description=Clinic Confirmations production release watcher
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/sbin/clinic-confirmations-watch-release
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

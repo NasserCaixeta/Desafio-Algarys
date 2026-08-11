@@ -75,48 +75,44 @@ jobs:
           cache-from: type=gha,scope=cd-${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=cd-${{ matrix.image }}
 
-  deploy:
-    name: Deploy production
+  verify:
+    name: Verify production deployment
     needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}
     env:
-      VPS_HOST: ${{ vars.VPS_HOST }}
-      VPS_PORT: ${{ vars.VPS_PORT }}
-      VPS_USER: ${{ vars.VPS_USER }}
       PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+      BASIC_AUTH_USERNAME: ${{ vars.BASIC_AUTH_USERNAME }}
+      BASIC_AUTH_PASSWORD: ${{ secrets.BASIC_AUTH_PASSWORD }}
     steps:
-      - name: Check out tested commit
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ env.DEPLOY_SHA }}
-
-      - name: Configure SSH
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+      - name: Wait for pull-based deployment
         run: |
-          install -d -m 0700 "$HOME/.ssh"
-          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          chmod 0600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+          response_file=$(mktemp)
+          trap 'rm -f "$response_file"' EXIT
 
-      - name: Deploy tested commit
-        run: |
-          port=${VPS_PORT:-22}
-          ssh -i "$HOME/.ssh/id_ed25519" \
-            -p "$port" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            "$VPS_USER@$VPS_HOST" \
-            "deploy $DEPLOY_SHA $IMAGE_TAG"
+          for attempt in {1..48}; do
+            if curl --fail --silent --show-error --max-time 10 \
+              --user "$BASIC_AUTH_USERNAME:$BASIC_AUTH_PASSWORD" \
+              --output "$response_file" \
+              "$PRODUCTION_URL/status"; then
+              current_version=$(python3 -c \
+                'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
+                "$response_file")
+              if [[ $current_version == "$IMAGE_TAG" ]]; then
+                curl --fail --silent --show-error --max-time 10 \
+                  "$PRODUCTION_URL/health/live" >/dev/null
+                exit 0
+              fi
+            fi
+            echo "Waiting for $IMAGE_TAG (attempt $attempt/48)"
+            sleep 10
+          done
 
-      - name: Verify public liveness
-        run: curl --fail --silent --show-error --max-time 15 "$PRODUCTION_URL/health/live"
+          echo "Production did not reach $IMAGE_TAG within the deployment window" >&2
+          exit 1
 
       - name: Record deployment summary
         if: success()
@@ -128,7 +124,3 @@ jobs:
             echo "- Image tag: \`$IMAGE_TAG\`"
             echo "- URL: $PRODUCTION_URL"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Remove SSH key
-        if: always()
-        run: rm -f "$HOME/.ssh/id_ed25519"

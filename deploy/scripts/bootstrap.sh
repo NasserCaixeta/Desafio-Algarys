@@ -50,7 +50,7 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 
 previous_commit=$(git rev-parse HEAD)
-git fetch --prune origin main
+git fetch --prune origin refs/heads/main:refs/remotes/origin/main
 
 if ! git cat-file -e "$commit_sha^{commit}"; then
   echo "commit is not available after fetching origin/main" >&2

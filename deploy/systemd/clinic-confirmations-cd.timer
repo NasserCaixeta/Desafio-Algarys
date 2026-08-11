@@ -1,0 +1,12 @@
+[Unit]
+Description=Check for a tested Clinic Confirmations release
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+RandomizedDelaySec=10s
+Persistent=true
+Unit=clinic-confirmations-cd.service
+
+[Install]
+WantedBy=timers.target

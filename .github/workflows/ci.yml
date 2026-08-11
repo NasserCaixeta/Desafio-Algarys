@@ -124,10 +124,10 @@ jobs:
 
       - name: Validate Compose configurations
         run: |
-          bash -n deploy/scripts/bootstrap.sh deploy/scripts/deploy.sh deploy/scripts/ssh-entrypoint.sh
+          bash -n deploy/scripts/bootstrap.sh deploy/scripts/deploy.sh deploy/scripts/watch-release.sh
           test -x deploy/scripts/bootstrap.sh
           test -x deploy/scripts/deploy.sh
-          test -x deploy/scripts/ssh-entrypoint.sh
+          test -x deploy/scripts/watch-release.sh
           docker compose config --quiet
           if DOMAIN=clinic.example.com GHCR_OWNER=example IMAGE_TAG=ci \
             docker compose -f compose.yaml -f compose.prod.yaml config --quiet 2>/dev/null; then
