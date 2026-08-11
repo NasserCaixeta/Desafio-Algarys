@@ -75,52 +75,21 @@ jobs:
           cache-from: type=gha,scope=cd-${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=cd-${{ matrix.image }}
 
-  verify:
-    name: Verify production deployment
+  release:
+    name: Release for production watcher
     needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}
-    env:
-      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
-      BASIC_AUTH_USERNAME: ${{ vars.BASIC_AUTH_USERNAME }}
-      BASIC_AUTH_PASSWORD: ${{ secrets.BASIC_AUTH_PASSWORD }}
     steps:
-      - name: Wait for pull-based deployment
-        run: |
-          response_file=$(mktemp)
-          trap 'rm -f "$response_file"' EXIT
-
-          for attempt in {1..48}; do
-            if curl --fail --silent --show-error --max-time 10 \
-              --user "$BASIC_AUTH_USERNAME:$BASIC_AUTH_PASSWORD" \
-              --output "$response_file" \
-              "$PRODUCTION_URL/status"; then
-              current_version=$(python3 -c \
-                'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
-                "$response_file")
-              if [[ $current_version == "$IMAGE_TAG" ]]; then
-                curl --fail --silent --show-error --max-time 10 \
-                  "$PRODUCTION_URL/health/live" >/dev/null
-                exit 0
-              fi
-            fi
-            echo "Waiting for $IMAGE_TAG (attempt $attempt/48)"
-            sleep 10
-          done
-
-          echo "Production did not reach $IMAGE_TAG within the deployment window" >&2
-          exit 1
-
-      - name: Record deployment summary
-        if: success()
+      - name: Record immutable release
         run: |
           {
-            echo '### Production deployment'
+            echo '### Immutable production release published'
             echo
             echo "- Commit: \`$DEPLOY_SHA\`"
             echo "- Image tag: \`$IMAGE_TAG\`"
-            echo "- URL: $PRODUCTION_URL"
+            echo "- URL: ${{ vars.PRODUCTION_URL }}"
+            echo '- The VPS watcher will deploy this release and validate health locally.'
           } >> "$GITHUB_STEP_SUMMARY"

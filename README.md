@@ -338,9 +338,10 @@ VPS e não disparam o CD.
 O deploy é pull-based: um timer root-owned na VPS consulta a `main` por HTTPS e só aceita o commit
 quando as três imagens `sha-<commit>` existem no GHCR. O processo é serializado por `flock`, cria
 backup local antes da migration, atualiza os containers e verifica todos os healthchecks. O job de
-CD aguarda `/status` confirmar o SHA efetivamente implantado. Se uma etapa falhar, o servidor
-restaura checkout e imagens anteriores. Downgrade de schema e restauração do banco nunca são
-automáticos, pois poderiam descartar dados. Configuração e rollback estão no
+CD registra a release imutável no Environment `production`; a confirmação operacional fica no
+journal do watcher, porque os runners hospedados do GitHub não alcançam esta VPS. Se uma etapa
+falhar, o servidor restaura checkout e imagens anteriores. Downgrade de schema e restauração do
+banco nunca são automáticos, pois poderiam descartar dados. Configuração e rollback estão no
 [guia de CD](deploy/README.md#cd-automatico-da-main).
 
 ## Healthchecks e logs

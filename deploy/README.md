@@ -124,9 +124,17 @@ locais pré-migration, executa a migration e substitui os containers. A conclus�
 Redis, API, worker, scheduler, frontend e Nginx saudáveis, além de readiness/status internos e
 liveness público.
 
-O job `Verify production deployment` consulta `/status` com Basic Auth até a API informar
-`APP_VERSION=sha-<commit>`. Portanto, o workflow só fica verde depois que a versão testada está
-efetivamente em execução, não apenas depois de publicar imagens.
+O job `Release for production watcher` registra no Environment `production` que as três imagens
+imutáveis estão disponíveis. A confirmação da implantação é feita na própria VPS: o script só
+grava a nova release como concluída depois dos healthchecks, de `/status` interno e do liveness
+público; em falha, restaura o checkout e as imagens anteriores. Consulte a evidência com
+`journalctl -u clinic-confirmations-cd.service`.
+
+Os runners hospedados do GitHub não conseguem estabelecer conexão de entrada com esta VPS (SSH e
+HTTPS expiram antes de alcançar o servidor). Por isso, o workflow não tenta validar a URL pública e
+o watcher usa apenas conexões de saída. Essa separação evita um falso resultado vermelho após um
+deploy saudável e também evita instalar um runner persistente dentro de uma VPS ligada a um
+repositório público.
 
 ### Instalar o watcher na VPS
 
@@ -167,26 +175,16 @@ variáveis de ambiente:
 | Variável | Exemplo |
 | --- | --- |
 | `PRODUCTION_URL` | `https://clinica.example.com` |
-| `BASIC_AUTH_USERNAME` | usuário de leitura do ambiente publicado |
 
-Cadastre como secrets do Environment:
-
-| Secret | Conteúdo |
-| --- | --- |
-| `BASIC_AUTH_PASSWORD` | senha do usuário usado apenas para verificar `/status` |
-
-Com GitHub CLI autenticado, os valores podem ser enviados sem gravá-los no repositório:
+Com GitHub CLI autenticado, o valor pode ser enviado sem gravá-lo no repositório:
 
 ```bash
 gh variable set PRODUCTION_URL --env production --body 'https://clinica.example.com'
-gh variable set BASIC_AUTH_USERNAME --env production --body '<USUARIO>'
-gh secret set BASIC_AUTH_PASSWORD --env production
 ```
 
-As senhas do PostgreSQL, o login do GHCR e os certificados permanecem apenas na VPS. O GitHub recebe
-somente a credencial de leitura do proxy necessária para confirmar a versão; ela não concede shell
-nem acesso ao Docker. Se as imagens forem privadas, autentique o Docker da VPS uma vez com um token
-limitado a `read:packages`.
+As senhas do PostgreSQL, o Basic Auth, o login do GHCR e os certificados permanecem apenas na VPS.
+Se as imagens forem privadas, autentique o Docker da VPS uma vez com um token limitado a
+`read:packages`.
 
 ### Rollback do CD
 
