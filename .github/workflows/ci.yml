@@ -125,7 +125,12 @@ jobs:
       - name: Validate Compose configurations
         run: |
           docker compose config --quiet
-          DOMAIN=clinic.example.com GHCR_OWNER=example IMAGE_TAG=ci \
+          if DOMAIN=clinic.example.com GHCR_OWNER=example IMAGE_TAG=ci \
+            docker compose -f compose.yaml -f compose.prod.yaml config --quiet 2>/dev/null; then
+            echo "Production Compose must reject a missing POSTGRES_PASSWORD"
+            exit 1
+          fi
+          DOMAIN=clinic.example.com GHCR_OWNER=example IMAGE_TAG=ci POSTGRES_PASSWORD=ci-password \
             docker compose -f compose.yaml -f compose.prod.yaml config --quiet
           DOMAIN=clinic.example.com GHCR_OWNER=example IMAGE_TAG=ci POSTGRES_PASSWORD=ci-password \
             docker compose -f deploy/portainer/stack.yaml config --quiet

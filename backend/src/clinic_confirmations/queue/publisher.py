@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from clinic_confirmations.core.config import Settings
@@ -100,24 +101,49 @@ def _publish_loaded_message(
         )
     except Exception as exc:
         error = str(exc)
-        message.enqueue_attempts += 1
-        message.last_enqueue_error = error
-        message.next_enqueue_at = now + timedelta(
+        next_enqueue_at = now + timedelta(
             seconds=retry_delay_seconds(
-                attempt=message.enqueue_attempts,
+                attempt=message.enqueue_attempts + 1,
                 base=settings.retry_backoff_base_seconds,
                 maximum=settings.retry_backoff_max_seconds,
             )
         )
+        updated_id = session.scalar(
+            update(ConfirmationMessage)
+            .where(ConfirmationMessage.id == message.id)
+            .where(ConfirmationMessage.status == MessageStatus.PENDING)
+            .where(ConfirmationMessage.enqueued_at.is_(None))
+            .values(
+                enqueue_attempts=ConfirmationMessage.enqueue_attempts + 1,
+                last_enqueue_error=error,
+                next_enqueue_at=next_enqueue_at,
+            )
+            .returning(ConfirmationMessage.id)
+            .execution_options(synchronize_session="fetch")
+        )
         session.commit()
+        if updated_id is None:
+            session.refresh(message)
         return PublicationResult(
             message_id=message.id,
             published=False,
             error=error,
         )
 
-    message.enqueued_at = now
-    message.next_enqueue_at = None
-    message.last_enqueue_error = None
+    updated_id = session.scalar(
+        update(ConfirmationMessage)
+        .where(ConfirmationMessage.id == message.id)
+        .where(ConfirmationMessage.status == MessageStatus.PENDING)
+        .where(ConfirmationMessage.enqueued_at.is_(None))
+        .values(
+            enqueued_at=now,
+            next_enqueue_at=None,
+            last_enqueue_error=None,
+        )
+        .returning(ConfirmationMessage.id)
+        .execution_options(synchronize_session="fetch")
+    )
     session.commit()
+    if updated_id is None:
+        session.refresh(message)
     return PublicationResult(message_id=message.id, published=True)

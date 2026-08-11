@@ -164,8 +164,9 @@ Git.
 | `VITE_API_URL` | API absoluta; vazio usa o proxy da mesma origem | vazio |
 | `VITE_API_TIMEOUT_MS`, `VITE_POLL_INTERVAL_MS` | Timeout e polling do frontend | `10000`, `2000` |
 
-Em produção, use uma senha hexadecimal longa para `POSTGRES_PASSWORD`. Como a URL é construída
-pelo Compose, caracteres reservados de URL exigiriam percent-encoding.
+Em produção, `POSTGRES_PASSWORD` é obrigatória e o Compose recusa a configuração quando ela não é
+informada. Use uma senha hexadecimal longa; como a URL é construída pelo Compose, caracteres
+reservados de URL exigiriam percent-encoding.
 
 ## CSV
 
@@ -390,7 +391,7 @@ tentativa simples e outra `failed → sent`, registra resposta e confere o filtr
 
 `.github/workflows/ci.yml` roda em todo push e pull request:
 
-1. backend: cache pip, Ruff, mypy, upgrade/downgrade/re-upgrade, 124 testes e cobertura mínima 90%;
+1. backend: cache pip, Ruff, mypy, upgrade/downgrade/re-upgrade, 125 testes e cobertura mínima 90%;
 2. frontend: cache npm, ESLint, typecheck, 17 testes com cobertura e build;
 3. containers: valida os dois Compose, constrói imagens e executa o smoke completo;
 4. em falha do smoke, publica os logs dos containers e sempre remove os volumes do runner.

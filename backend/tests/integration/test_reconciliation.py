@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from clinic_confirmations.core.config import Settings
 from clinic_confirmations.db.models import Appointment, ConfirmationMessage
 from clinic_confirmations.db.session import create_session_factory
-from clinic_confirmations.queue.publisher import reconcile_enqueue
+from clinic_confirmations.domain.enums import MessageStatus
+from clinic_confirmations.queue.publisher import publish_message, reconcile_enqueue
+from clinic_confirmations.sender.simulated import SimulatedSender
+from clinic_confirmations.services.message_processing import process_message
 
 
 class CountingPublisher:
@@ -28,6 +31,37 @@ class CountingPublisher:
     ) -> object:
         with self._lock:
             self.count += 1
+        return object()
+
+
+class ProcessingPublisher:
+    def __init__(
+        self,
+        session_factory: sessionmaker[Session],
+        message_id: UUID,
+        settings: Settings,
+        now: datetime,
+    ) -> None:
+        self._session_factory = session_factory
+        self._message_id = message_id
+        self._settings = settings
+        self._now = now
+
+    def send_task(
+        self,
+        name: str,
+        args: list[object] | None = None,
+        kwargs: dict[str, object] | None = None,
+        queue: str | None = None,
+    ) -> object:
+        result = process_message(
+            self._session_factory,
+            SimulatedSender(("0000",), failure_attempts=1, latency_ms=0),
+            self._message_id,
+            self._settings,
+            now=self._now,
+        )
+        assert result.status == MessageStatus.FAILED
         return object()
 
 
@@ -77,7 +111,7 @@ def test_two_reconcilers_publish_a_due_message_only_once(
 ) -> None:
     session_factory = create_session_factory(database_engine)
     now = datetime(2026, 8, 11, 12, tzinfo=UTC)
-    appointment_id = _create_committed_due_message(session_factory, now)
+    appointment_id, _ = _create_committed_due_message(session_factory, now)
     publisher = CountingPublisher()
     barrier = Barrier(2)
 
@@ -107,30 +141,61 @@ def test_two_reconcilers_publish_a_due_message_only_once(
         _delete_appointment(session_factory, appointment_id)
 
 
+def test_fast_worker_does_not_lose_retry_scheduled_during_publication(
+    database_engine: Engine,
+    test_settings: Settings,
+) -> None:
+    session_factory = create_session_factory(database_engine)
+    now = datetime(2026, 8, 11, 12, tzinfo=UTC)
+    retry_at = now + timedelta(seconds=5)
+    appointment_id, message_id = _create_committed_due_message(session_factory, now)
+    publisher = ProcessingPublisher(session_factory, message_id, test_settings, now)
+
+    try:
+        with session_factory() as session:
+            result = publish_message(
+                session,
+                message_id,
+                publisher,
+                test_settings,
+                now=now,
+            )
+
+        assert result.published is True
+        with session_factory() as session:
+            message = session.get(ConfirmationMessage, message_id)
+            assert message is not None
+            assert message.status == MessageStatus.FAILED
+            assert message.attempt_count == 1
+            assert message.enqueued_at is None
+            assert message.next_enqueue_at == retry_at
+    finally:
+        _delete_appointment(session_factory, appointment_id)
+
+
 def _create_committed_due_message(
     session_factory: sessionmaker[Session],
     now: datetime,
-) -> UUID:
+) -> tuple[UUID, UUID]:
     with session_factory() as session:
         appointment = Appointment(
             scheduled_at=now,
             patient_name="Reconciliação concorrente",
-            phone="+5534999998888",
+            phone="+5534999990000",
             procedure="Consulta",
             import_fingerprint=uuid4().hex,
         )
         session.add(appointment)
         session.flush()
-        session.add(
-            ConfirmationMessage(
-                appointment_id=appointment.id,
-                max_attempts=3,
-                correlation_id=uuid4().hex,
-                next_enqueue_at=now,
-            )
+        message = ConfirmationMessage(
+            appointment_id=appointment.id,
+            max_attempts=3,
+            correlation_id=uuid4().hex,
+            next_enqueue_at=now,
         )
+        session.add(message)
         session.commit()
-        return appointment.id
+        return appointment.id, message.id
 
 
 def _delete_appointment(
