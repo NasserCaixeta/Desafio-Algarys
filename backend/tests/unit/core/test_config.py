@@ -1,22 +1,11 @@
-from importlib import import_module
-from importlib.util import find_spec
-
 import pytest
 from pydantic import ValidationError
 
-
-def load_settings_class():  # type: ignore[no-untyped-def]
-    core_spec = find_spec("clinic_confirmations.core")
-    assert core_spec is not None, "core package must exist"
-    spec = find_spec("clinic_confirmations.core.config")
-    assert spec is not None, "core.config module must exist"
-    return import_module("clinic_confirmations.core.config").Settings
+from clinic_confirmations.core.config import Settings
 
 
 def test_settings_parse_cors_and_failure_suffixes() -> None:
-    settings_class = load_settings_class()
-
-    settings = settings_class(
+    settings = Settings(
         _env_file=None,
         database_url="postgresql+psycopg://u:p@db/app",
         redis_url="redis://redis:6379/0",
@@ -41,10 +30,8 @@ def test_settings_parse_cors_and_failure_suffixes() -> None:
     ],
 )
 def test_settings_reject_non_positive_limits(field: str, value: int) -> None:
-    settings_class = load_settings_class()
-
     with pytest.raises(ValidationError):
-        settings_class(
+        Settings(
             _env_file=None,
             database_url="postgresql+psycopg://u:p@db/app",
             redis_url="redis://redis:6379/0",
@@ -53,10 +40,8 @@ def test_settings_reject_non_positive_limits(field: str, value: int) -> None:
 
 
 def test_settings_reject_unknown_timezone() -> None:
-    settings_class = load_settings_class()
-
     with pytest.raises(ValidationError, match="Unknown timezone"):
-        settings_class(
+        Settings(
             _env_file=None,
             database_url="postgresql+psycopg://u:p@db/app",
             redis_url="redis://redis:6379/0",

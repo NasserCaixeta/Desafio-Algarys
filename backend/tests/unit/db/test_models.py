@@ -1,18 +1,8 @@
-from importlib import import_module
-from importlib.util import find_spec
-
-
-def load_model_metadata():  # type: ignore[no-untyped-def]
-    db_spec = find_spec("clinic_confirmations.db")
-    assert db_spec is not None, "db package must exist"
-    models_spec = find_spec("clinic_confirmations.db.models")
-    assert models_spec is not None, "db.models package must exist"
-    import_module("clinic_confirmations.db.models")
-    return import_module("clinic_confirmations.db.base").Base.metadata
+from clinic_confirmations.db.models import Appointment
 
 
 def test_models_define_required_tables_and_unique_constraints() -> None:
-    metadata = load_model_metadata()
+    metadata = Appointment.metadata
 
     assert set(metadata.tables) == {
         "appointments",
@@ -36,7 +26,7 @@ def test_models_define_required_tables_and_unique_constraints() -> None:
 
 
 def test_models_define_operational_indexes() -> None:
-    metadata = load_model_metadata()
+    metadata = Appointment.metadata
 
     index_names = {index.name for table in metadata.tables.values() for index in table.indexes}
     assert {
@@ -48,7 +38,7 @@ def test_models_define_operational_indexes() -> None:
 
 
 def test_database_enums_use_public_lowercase_values() -> None:
-    metadata = load_model_metadata()
+    metadata = Appointment.metadata
 
     assert metadata.tables["appointments"].c.status.type.enums == [
         "pending",
