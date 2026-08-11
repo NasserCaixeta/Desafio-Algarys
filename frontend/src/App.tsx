@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { AppointmentStatus, ImportReport } from "./api/types";
 import { AppointmentDateNavigation } from "./components/AppointmentDateNavigation";
 import { AppointmentList } from "./components/AppointmentList";
 import { DashboardFilters } from "./components/DashboardFilters";
 import { ImportPanel } from "./components/ImportPanel";
+import { InitialLoadingScreen } from "./components/InitialLoadingScreen";
 import { useAppointments } from "./hooks/useAppointments";
 import { useAppointmentDates } from "./hooks/useAppointmentDates";
 import { useMessageActions } from "./hooks/useMessageActions";
 import { todayInClinicTimezone } from "./utils/format";
 
 export function App() {
+  const [introFinished, setIntroFinished] = useState(import.meta.env.MODE === "test");
   const [date, setDate] = useState(todayInClinicTimezone);
   const [status, setStatus] = useState<AppointmentStatus | "">("");
   const [page, setPage] = useState(1);
@@ -25,6 +27,12 @@ export function App() {
   const selectedCount = selectedAppointmentIds.size;
   const actionsDisabled =
     actions.dispatch.isPending || actions.respond.isPending || actions.retry.isPending;
+
+  useEffect(() => {
+    if (introFinished) return;
+    const timeout = window.setTimeout(() => setIntroFinished(true), 900);
+    return () => window.clearTimeout(timeout);
+  }, [introFinished]);
 
   function changeDate(value: string) {
     setDate(value);
@@ -115,6 +123,10 @@ export function App() {
   function prepareAction() {
     setFeedback("");
     setActionError("");
+  }
+
+  if (!introFinished || (appointments.isPending && appointmentDates.isPending)) {
+    return <InitialLoadingScreen />;
   }
 
   return (

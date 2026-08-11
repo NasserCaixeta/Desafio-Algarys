@@ -1,0 +1,39 @@
+.filters {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.filters label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filters input,
+.filters select {
+  min-height: 44px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--heading);
+  text-transform: none;
+}
+
+.filters input:hover,
+.filters select:hover,
+.filters input:focus,
+.filters select:focus {
+  border-color: rgb(112 255 227 / 70%);
+}
+
+@media (max-width: 760px) {
+  .filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

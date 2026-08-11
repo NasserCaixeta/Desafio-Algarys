@@ -1,0 +1,85 @@
+.appointment-dates {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: #080808;
+}
+
+.appointment-dates-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.appointment-dates-heading h3,
+.appointment-dates-heading span,
+.appointment-dates p {
+  margin: 0;
+}
+
+.appointment-dates-heading h3 {
+  color: var(--heading);
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.appointment-dates-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.appointment-date-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.appointment-date {
+  display: grid;
+  gap: 0.15rem;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.45rem;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.appointment-date:hover:not(.is-active) {
+  border-color: #5a5a5a;
+  color: var(--heading);
+  transform: translateY(-1px);
+}
+
+.appointment-date strong {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.appointment-date.is-active {
+  border-color: var(--accent);
+  background: rgb(1 255 206 / 9%);
+  color: var(--accent);
+  box-shadow: inset 0 0 24px rgb(1 255 206 / 4%);
+}
+
+.appointment-date.is-active strong {
+  color: rgb(112 255 227 / 72%);
+}
+
+@media (max-width: 760px) {
+  .appointment-dates-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .appointment-date {
+    flex: 1 1 9rem;
+  }
+}
