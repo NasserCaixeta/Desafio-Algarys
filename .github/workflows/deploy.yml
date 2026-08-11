@@ -57,6 +57,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Normalize registry owner
+        id: registry
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - name: Build and publish immutable image
         uses: docker/build-push-action@v7
         with:
@@ -64,7 +68,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+          tags: ghcr.io/${{ steps.registry.outputs.owner }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
           labels: |
             org.opencontainers.image.revision=${{ env.DEPLOY_SHA }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
