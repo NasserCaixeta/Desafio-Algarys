@@ -1,0 +1,16 @@
+data_hora,paciente,telefone,procedimento
+18/08/2026 08:00,Ana Beatriz Souza,(34) 99991-0101,Consulta clínica geral
+18/08/2026 08:30,Carlos Eduardo Lima,+55 34 99992-0202,Retorno cardiologia
+18/08/2026 09:00,Mariana Alves Rocha,(34) 99993-0303,Avaliação dermatológica
+18/08/2026 09:30,João Pedro Martins,+5534999940404,Consulta pediátrica
+18/08/2026 10:00,Fernanda Oliveira Reis,(34) 99995-0505,Ultrassonografia
+18/08/2026 10:30,Rafael Mendes Costa,+55 (34) 99996-0606,Coleta laboratorial
+18/08/2026 11:00,Juliana Ferreira Gomes,34 99997-0707,Sessão de fisioterapia
+18/08/2026 13:30,Lucas Henrique Silva,(34) 99998-0808,Consulta endocrinologia
+18/08/2026 14:00,Patrícia Moreira Santos,+5534999890909,Eletrocardiograma
+18/08/2026 14:30,Gabriel Nunes Ribeiro,(34) 99988-1010,Retorno ortopedia
+2026-08-19 08:00,Beatriz Andrade Melo,(34) 99987-1111,Consulta ginecológica
+2026-08-19 09:00,Marcelo Araújo Freitas,+55 34 99986-1212,Avaliação nutricional
+2026-08-19 10:00,Camila Rodrigues Pinto,(34) 99985-1313,Consulta oftalmológica
+2026-08-19 11:00,Diego Barbosa Teixeira,+5534999841414,Retorno neurologia
+2026-08-19 14:00,Renata Carvalho Lopes,(34) 99983-1515,Exame preventivo

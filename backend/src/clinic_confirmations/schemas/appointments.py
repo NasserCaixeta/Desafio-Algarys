@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -28,3 +28,12 @@ class AppointmentRead(BaseModel):
 class AppointmentList(BaseModel):
     items: list[AppointmentRead]
     pagination: Pagination
+
+
+class AppointmentDateSummary(BaseModel):
+    date: date
+    count: int = Field(gt=0)
+
+
+class AppointmentCalendar(BaseModel):
+    items: list[AppointmentDateSummary]

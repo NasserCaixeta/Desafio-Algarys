@@ -28,6 +28,7 @@ def dispatch_confirmations(
         session,
         payload.date,
         settings,
+        appointment_ids=payload.appointment_ids,
         correlation_id=request.state.request_id,
         publisher=publisher,
     )

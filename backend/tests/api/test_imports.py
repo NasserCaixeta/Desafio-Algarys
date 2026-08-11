@@ -38,6 +38,7 @@ def test_import_keeps_valid_rows_and_reports_invalid_ones(
     }
     assert response.json()["imported_lines"] == [2]
     assert response.json()["duplicate_lines"] == []
+    assert response.json()["appointment_dates"] == ["2026-08-11"]
     assert response.json()["errors"] == [
         {
             "line_number": 3,
@@ -84,6 +85,24 @@ def test_duplicate_rows_in_same_file_are_reported(client: TestClient) -> None:
     assert response.json()["summary"]["duplicates"] == 1
     assert response.json()["imported_lines"] == [2]
     assert response.json()["duplicate_lines"] == [3]
+    assert response.json()["appointment_dates"] == ["2026-08-11"]
+
+
+def test_import_reports_sorted_unique_valid_appointment_dates(client: TestClient) -> None:
+    response = client.post(
+        IMPORT_URL,
+        files=csv_file(
+            csv_bytes(
+                b"12/08/2026 09:30,Ana,34999991111,Consulta",
+                b"11/08/2026 10:30,Beto,34999992222,Retorno",
+                b"12/08/2026 11:30,Carla,34999993333,Avaliacao",
+                b"invalid,Dora,123,Retorno",
+            )
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["appointment_dates"] == ["2026-08-11", "2026-08-12"]
 
 
 def test_missing_header_returns_standardized_422(client: TestClient) -> None:

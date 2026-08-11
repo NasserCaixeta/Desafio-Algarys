@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -17,13 +18,16 @@ def dispatch_for_date(
     appointment_date: date,
     settings: Settings,
     *,
+    appointment_ids: list[UUID] | None = None,
     correlation_id: str,
     publisher: TaskPublisher | None = None,
 ) -> DispatchResult:
     start_at, end_at = utc_day_bounds(appointment_date, ZoneInfo(settings.timezone))
+    selected_ids = set(appointment_ids) if appointment_ids is not None else None
     candidates = AppointmentRepository(session).list_dispatch_candidates(
         start_at,
         end_at,
+        appointment_ids=selected_ids,
     )
     eligible_ids = [
         appointment_id
@@ -40,6 +44,7 @@ def dispatch_for_date(
 
     created = len(created_ids)
     eligible = len(eligible_ids)
+    scoped = len(selected_ids) if selected_ids is not None else len(candidates)
     queued = 0
     if publisher is not None:
         queued = sum(
@@ -50,7 +55,7 @@ def dispatch_for_date(
         eligible=eligible,
         created=created,
         already_existing=eligible - created,
-        ignored=len(candidates) - eligible,
+        ignored=scoped - eligible,
         queued=queued,
         pending_reconciliation=created - queued,
     )

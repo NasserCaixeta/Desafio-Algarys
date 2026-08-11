@@ -122,6 +122,32 @@ def test_empty_list_has_zero_pages(client: TestClient) -> None:
     assert response.json()["pagination"]["total_pages"] == 0
 
 
+def test_calendar_lists_only_dates_with_appointments_in_clinic_timezone(
+    client: TestClient,
+    appointment_factory: Callable[..., Appointment],
+) -> None:
+    appointment_factory(scheduled_at=datetime(2026, 8, 11, 2, 59, tzinfo=UTC))
+    appointment_factory(scheduled_at=datetime(2026, 8, 11, 3, tzinfo=UTC))
+    appointment_factory(scheduled_at=datetime(2026, 8, 11, 14, tzinfo=UTC))
+
+    response = client.get(f"{APPOINTMENTS_URL}/calendar")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {"date": "2026-08-10", "count": 1},
+            {"date": "2026-08-11", "count": 2},
+        ]
+    }
+
+
+def test_calendar_is_empty_without_appointments(client: TestClient) -> None:
+    response = client.get(f"{APPOINTMENTS_URL}/calendar")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": []}
+
+
 @pytest.mark.parametrize("size", [0, 101])
 def test_page_size_bounds_return_standardized_422(client: TestClient, size: int) -> None:
     response = client.get(APPOINTMENTS_URL, params={"page_size": size})

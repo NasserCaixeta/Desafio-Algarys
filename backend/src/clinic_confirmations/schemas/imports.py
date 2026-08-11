@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,7 @@ class ImportSummary(BaseModel):
 
 class ImportReport(BaseModel):
     summary: ImportSummary
+    appointment_dates: list[date] = Field(default_factory=list)
     imported_lines: list[int] = Field(default_factory=list)
     duplicate_lines: list[int] = Field(default_factory=list)
     errors: list[ImportRowError] = Field(default_factory=list)

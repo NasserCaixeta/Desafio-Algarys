@@ -129,6 +129,9 @@ def import_appointments_from_csv(
             rejected=len(parsed.errors),
             duplicates=len(duplicate_lines),
         ),
+        appointment_dates=sorted(
+            {row.scheduled_at.astimezone(timezone).date() for row in parsed.valid_rows}
+        ),
         imported_lines=imported_lines,
         duplicate_lines=duplicate_lines,
         errors=parsed.errors,

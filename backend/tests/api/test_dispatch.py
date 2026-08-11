@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -115,6 +116,80 @@ def test_dispatch_uses_local_date_boundaries(
     assert appointment_ids == {first.id, last.id}
     assert before.id not in appointment_ids
     assert after.id not in appointment_ids
+
+
+def test_dispatch_creates_messages_only_for_selected_appointments(
+    client: TestClient,
+    db_session: Session,
+    appointment_factory: Callable[..., Appointment],
+) -> None:
+    selected = appointment_factory()
+    unselected = appointment_factory(scheduled_at=datetime(2026, 8, 11, 13, tzinfo=UTC))
+
+    response = client.post(
+        DISPATCH_URL,
+        json={"date": "2026-08-11", "appointment_ids": [str(selected.id)]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "eligible": 1,
+        "created": 1,
+        "already_existing": 0,
+        "ignored": 0,
+        "queued": 1,
+        "pending_reconciliation": 0,
+    }
+    appointment_ids = set(db_session.scalars(select(ConfirmationMessage.appointment_id)))
+    assert appointment_ids == {selected.id}
+    assert unselected.id not in appointment_ids
+
+
+def test_dispatch_selection_ignores_unknown_outside_date_and_ineligible_ids(
+    client: TestClient,
+    db_session: Session,
+    appointment_factory: Callable[..., Appointment],
+) -> None:
+    eligible = appointment_factory()
+    ineligible = appointment_factory(
+        scheduled_at=datetime(2026, 8, 11, 13, tzinfo=UTC),
+        status=AppointmentStatus.CONFIRMED,
+    )
+    outside_date = appointment_factory(scheduled_at=datetime(2026, 8, 12, 12, tzinfo=UTC))
+
+    response = client.post(
+        DISPATCH_URL,
+        json={
+            "date": "2026-08-11",
+            "appointment_ids": [
+                str(eligible.id),
+                str(ineligible.id),
+                str(outside_date.id),
+                str(uuid4()),
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "eligible": 1,
+        "created": 1,
+        "already_existing": 0,
+        "ignored": 3,
+        "queued": 1,
+        "pending_reconciliation": 0,
+    }
+    assert set(db_session.scalars(select(ConfirmationMessage.appointment_id))) == {eligible.id}
+
+
+def test_dispatch_rejects_empty_selection(client: TestClient) -> None:
+    response = client.post(
+        DISPATCH_URL,
+        json={"date": "2026-08-11", "appointment_ids": []},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "request_validation_error"
 
 
 def test_dispatch_empty_date_returns_zero_counts(client: TestClient) -> None:

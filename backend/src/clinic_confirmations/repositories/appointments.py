@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, Date, cast, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
@@ -68,17 +68,31 @@ class AppointmentRepository:
         )
         return self._session.scalar(statement)
 
+    def list_date_counts(self, timezone: str) -> list[tuple[date, int]]:
+        local_date = cast(
+            func.timezone(timezone, Appointment.scheduled_at),
+            Date,
+        ).label("appointment_date")
+        count = func.count(Appointment.id).label("appointment_count")
+        statement = select(local_date, count).group_by(local_date).order_by(local_date)
+        rows = self._session.execute(statement).all()
+        return [(row.appointment_date, row.appointment_count) for row in rows]
+
     def list_dispatch_candidates(
         self,
         start_at: datetime,
         end_at: datetime,
+        *,
+        appointment_ids: set[UUID] | None = None,
     ) -> list[tuple[UUID, AppointmentStatus]]:
         statement = (
             select(Appointment.id, Appointment.status)
             .where(Appointment.scheduled_at >= start_at)
             .where(Appointment.scheduled_at < end_at)
-            .order_by(Appointment.id)
         )
+        if appointment_ids is not None:
+            statement = statement.where(Appointment.id.in_(appointment_ids))
+        statement = statement.order_by(Appointment.id)
         return list(self._session.execute(statement).tuples().all())
 
     def lock_with_message(self, appointment_id: UUID) -> Appointment | None:

@@ -9,6 +9,8 @@ from clinic_confirmations.domain.enums import AppointmentStatus
 from clinic_confirmations.domain.errors import AppointmentNotFoundError
 from clinic_confirmations.repositories.appointments import AppointmentRepository
 from clinic_confirmations.schemas.appointments import (
+    AppointmentCalendar,
+    AppointmentDateSummary,
     AppointmentList,
     AppointmentMessageSummary,
     AppointmentRead,
@@ -49,6 +51,16 @@ def get_appointment(session: Session, appointment_id: UUID) -> AppointmentRead:
     if appointment is None:
         raise AppointmentNotFoundError
     return _to_read(appointment)
+
+
+def list_appointment_dates(session: Session, timezone: ZoneInfo) -> AppointmentCalendar:
+    dates = AppointmentRepository(session).list_date_counts(timezone.key)
+    return AppointmentCalendar(
+        items=[
+            AppointmentDateSummary(date=appointment_date, count=count)
+            for appointment_date, count in dates
+        ]
+    )
 
 
 def optional_utc_day_bounds(
