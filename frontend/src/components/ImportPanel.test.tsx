@@ -34,6 +34,7 @@ it("uploads the CSV and shows partial import errors", async () => {
       expect(request.headers.get("Content-Type")).toMatch(/^multipart\/form-data; boundary=/);
       return HttpResponse.json({
         summary: { total_rows: 2, imported: 1, rejected: 1, duplicates: 0 },
+        appointment_dates: ["2026-08-11"],
         imported_lines: [2],
         duplicate_lines: [],
         errors: [
@@ -82,6 +83,7 @@ it("disables submit and announces progress while uploading", async () => {
       await delay(100);
       return HttpResponse.json({
         summary: { total_rows: 1, imported: 1, rejected: 0, duplicates: 0 },
+        appointment_dates: ["2026-08-11"],
         imported_lines: [2],
         duplicate_lines: [],
         errors: [],
@@ -106,6 +108,7 @@ it("shows duplicate summary and standardized API failure", async () => {
       if (attempt === 1) {
         return HttpResponse.json({
           summary: { total_rows: 2, imported: 0, rejected: 0, duplicates: 2 },
+          appointment_dates: ["2026-08-11"],
           imported_lines: [],
           duplicate_lines: [2, 3],
           errors: [],

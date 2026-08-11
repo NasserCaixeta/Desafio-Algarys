@@ -1,5 +1,6 @@
 import type {
   ApiErrorPayload,
+  AppointmentCalendar,
   AppointmentFilters,
   AppointmentPage,
   DispatchResult,
@@ -124,16 +125,20 @@ export const api = {
     );
   },
 
+  listAppointmentDates(): Promise<AppointmentCalendar> {
+    return request("/appointments/calendar");
+  },
+
   importAppointments(file: File): Promise<ImportReport> {
     const formData = new FormData();
     formData.set("file", file);
     return request("/imports/appointments", { method: "POST", body: formData });
   },
 
-  dispatch(date: string): Promise<DispatchResult> {
+  dispatch(date: string, appointmentIds?: string[]): Promise<DispatchResult> {
     return request("/confirmations/dispatch", {
       method: "POST",
-      body: JSON.stringify({ date }),
+      body: JSON.stringify({ date, appointment_ids: appointmentIds }),
     });
   },
 

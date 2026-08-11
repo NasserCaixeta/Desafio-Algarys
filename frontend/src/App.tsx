@@ -1,10 +1,12 @@
 import { useState } from "react";
 
-import type { AppointmentStatus } from "./api/types";
+import type { AppointmentStatus, ImportReport } from "./api/types";
+import { AppointmentDateNavigation } from "./components/AppointmentDateNavigation";
 import { AppointmentList } from "./components/AppointmentList";
 import { DashboardFilters } from "./components/DashboardFilters";
 import { ImportPanel } from "./components/ImportPanel";
 import { useAppointments } from "./hooks/useAppointments";
+import { useAppointmentDates } from "./hooks/useAppointmentDates";
 import { useMessageActions } from "./hooks/useMessageActions";
 import { todayInClinicTimezone } from "./utils/format";
 
@@ -14,26 +16,64 @@ export function App() {
   const [page, setPage] = useState(1);
   const [feedback, setFeedback] = useState("");
   const [actionError, setActionError] = useState("");
+  const [selectedAppointmentIds, setSelectedAppointmentIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const appointments = useAppointments({ date, status, page, pageSize: 20 });
+  const appointmentDates = useAppointmentDates();
   const actions = useMessageActions();
+  const selectedCount = selectedAppointmentIds.size;
   const actionsDisabled =
     actions.dispatch.isPending || actions.respond.isPending || actions.retry.isPending;
 
   function changeDate(value: string) {
     setDate(value);
     setPage(1);
+    setSelectedAppointmentIds(new Set());
   }
 
   function changeStatus(value: AppointmentStatus | "") {
     setStatus(value);
     setPage(1);
+    setSelectedAppointmentIds(new Set());
   }
 
-  async function dispatchConfirmations() {
-    if (!window.confirm(`Disparar as confirmações da agenda de ${date}?`)) return;
+  function handleImported(report: ImportReport) {
+    const displayedAgendaIsEmpty = (appointments.data?.pagination.total ?? 0) === 0;
+    if (!displayedAgendaIsEmpty || report.appointment_dates.length === 0) return;
+
+    const importedDate = nearestDate(report.appointment_dates, todayInClinicTimezone());
+    setStatus("");
+    changeDate(importedDate);
+  }
+
+  function setAppointmentSelected(appointmentId: string, selected: boolean) {
+    setSelectedAppointmentIds((current) => {
+      const next = new Set(current);
+      if (selected) next.add(appointmentId);
+      else next.delete(appointmentId);
+      return next;
+    });
+  }
+
+  function setVisibleAppointmentsSelected(appointmentIds: string[], selected: boolean) {
+    setSelectedAppointmentIds((current) => {
+      const next = new Set(current);
+      for (const appointmentId of appointmentIds) {
+        if (selected) next.add(appointmentId);
+        else next.delete(appointmentId);
+      }
+      return next;
+    });
+  }
+
+  async function dispatchConfirmations(appointmentIds?: string[]) {
+    const confirmation = dispatchConfirmationText(date, appointmentIds);
+    if (!window.confirm(confirmation)) return;
     prepareAction();
     try {
-      const result = await actions.dispatch.mutateAsync(date);
+      const result = await actions.dispatch.mutateAsync({ date, appointmentIds });
+      setSelectedAppointmentIds(new Set());
       setFeedback(
         `${result.created} ${result.created === 1 ? "mensagem criada" : "mensagens criadas"}, ` +
           `${result.already_existing} ${result.already_existing === 1 ? "duplicada" : "duplicadas"} e ` +
@@ -48,7 +88,11 @@ export function App() {
     prepareAction();
     try {
       await actions.respond.mutateAsync({ appointmentId, status: response });
-      setFeedback(response === "confirmed" ? "Consulta confirmada" : "Consulta recusada");
+      setFeedback(
+        response === "confirmed"
+          ? "Resposta registrada: paciente confirmou"
+          : "Resposta registrada: paciente recusou",
+      );
     } catch (error) {
       setActionError(messageFrom(error));
     }
@@ -57,8 +101,12 @@ export function App() {
   async function retry(messageId: string) {
     prepareAction();
     try {
-      await actions.retry.mutateAsync(messageId);
-      setFeedback("Mensagem agendada para reprocessamento");
+      const result = await actions.retry.mutateAsync(messageId);
+      setFeedback(
+        result.queued
+          ? "Nova tentativa enviada para a fila"
+          : "Nova tentativa agendada e aguardando reconciliação da fila",
+      );
     } catch (error) {
       setActionError(messageFrom(error));
     }
@@ -77,7 +125,7 @@ export function App() {
         <p>Acompanhe a agenda e o processamento das mensagens.</p>
       </header>
 
-      <ImportPanel />
+      <ImportPanel onImported={handleImported} />
 
       <section className="panel" aria-labelledby="agenda-title">
         <div className="panel-heading">
@@ -92,16 +140,36 @@ export function App() {
               onDateChange={changeDate}
               onStatusChange={changeStatus}
             />
-            <button
-              type="button"
-              className="primary-button dispatch-button"
-              disabled={actionsDisabled || !date}
-              onClick={() => void dispatchConfirmations()}
-            >
-              {actions.dispatch.isPending ? "Disparando…" : "Disparar confirmações"}
-            </button>
+            <div className="dispatch-actions" aria-label="Enviar solicitações de confirmação">
+              <button
+                type="button"
+                className="primary-button dispatch-button"
+                disabled={actionsDisabled || !date || selectedCount === 0}
+                onClick={() => void dispatchConfirmations([...selectedAppointmentIds])}
+              >
+                {actions.dispatch.isPending
+                  ? "Enviando…"
+                  : selectedDispatchLabel(selectedCount)}
+              </button>
+              <button
+                type="button"
+                className="action-button dispatch-button"
+                disabled={actionsDisabled || !date}
+                onClick={() => void dispatchConfirmations()}
+              >
+                {actions.dispatch.isPending ? "Enviando…" : "Enviar para todos do dia"}
+              </button>
+            </div>
           </div>
         </div>
+
+        <AppointmentDateNavigation
+          calendar={appointmentDates.data}
+          currentDate={date}
+          isPending={appointmentDates.isPending}
+          isError={appointmentDates.isError}
+          onDateChange={changeDate}
+        />
 
         {feedback ? <p role="status" className="action-feedback">{feedback}</p> : null}
         {actionError ? <p role="alert" className="action-feedback state-error">{actionError}</p> : null}
@@ -120,6 +188,9 @@ export function App() {
           <AppointmentList
             appointments={appointments.data.items}
             actionsDisabled={actionsDisabled}
+            selectedAppointmentIds={selectedAppointmentIds}
+            onSelectionChange={setAppointmentSelected}
+            onVisibleSelectionChange={setVisibleAppointmentsSelected}
             onRespond={(appointmentId, response) => void respond(appointmentId, response)}
             onRetry={(messageId) => void retry(messageId)}
           />
@@ -153,4 +224,34 @@ export function App() {
 
 function messageFrom(error: unknown): string {
   return error instanceof Error ? error.message : "Não foi possível concluir a ação.";
+}
+
+function dispatchConfirmationText(date: string, appointmentIds?: string[]): string {
+  if (appointmentIds === undefined) {
+    return `Enviar solicitações de confirmação para todos os pacientes elegíveis de ${date}?`;
+  }
+  if (appointmentIds.length === 1) {
+    return "Enviar solicitação de confirmação para 1 paciente selecionado?";
+  }
+  return `Enviar solicitações de confirmação para ${appointmentIds.length} pacientes selecionados?`;
+}
+
+function selectedDispatchLabel(selectedCount: number): string {
+  if (selectedCount === 0) return "Enviar para selecionados";
+  if (selectedCount === 1) return "Enviar para 1 selecionado";
+  return `Enviar para ${selectedCount} selecionados`;
+}
+
+function nearestDate(dates: string[], referenceDate: string): string {
+  const referenceDay = isoDateToUtcDay(referenceDate);
+  return [...dates].sort((left, right) => {
+    const leftDistance = Math.abs(isoDateToUtcDay(left) - referenceDay);
+    const rightDistance = Math.abs(isoDateToUtcDay(right) - referenceDay);
+    return leftDistance - rightDistance || left.localeCompare(right);
+  })[0]!;
+}
+
+function isoDateToUtcDay(value: string): number {
+  const [year, month, day] = value.split("-");
+  return Date.UTC(Number(year), Number(month) - 1, Number(day));
 }

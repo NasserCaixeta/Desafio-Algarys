@@ -12,12 +12,14 @@ publicação, logs estruturados, healthchecks, CI e um caminho de deploy em VPS.
 
 1. A clínica envia um CSV pelo frontend ou por `POST /api/v1/imports/appointments`.
 2. Linhas válidas são importadas; linhas inválidas voltam no relatório sem abortar o arquivo.
-3. A agenda é filtrada por data e status.
-4. O operador dispara as confirmações daquela data.
-5. A API persiste uma única mensagem `pending` por agendamento e publica uma tarefa no Redis.
-6. Um worker Celery separado reivindica a mensagem atomicamente e registra a tentativa.
-7. O simulador conclui como `sent` ou `failed`; falhas elegíveis voltam com backoff.
-8. Depois de `sent`, o operador simula a resposta `confirmed` ou `declined`.
+3. Se a agenda exibida estiver vazia, o frontend abre automaticamente a data importada mais
+   próxima de hoje; datas com consultas também ficam disponíveis como atalhos.
+4. A agenda é filtrada por data e status.
+5. O operador dispara as confirmações para os agendamentos selecionados ou para todos daquela data.
+6. A API persiste uma única mensagem `pending` por agendamento e publica uma tarefa no Redis.
+7. Um worker Celery separado reivindica a mensagem atomicamente e registra a tentativa.
+8. O simulador conclui como `sent` ou `failed`; falhas elegíveis voltam com backoff.
+9. Depois de `sent`, o operador simula a resposta `confirmed` ou `declined`.
 
 O fluxo completo pode ser executado contra os containers com:
 
@@ -199,7 +201,8 @@ curl -F 'file=@examples/appointments.csv;type=text/csv' \
 O fingerprint é SHA-256 de data/hora UTC, paciente, telefone e procedimento normalizados. A coluna
 possui constraint única. Uma reimportação não cria cópia silenciosa: a linha aparece em
 `duplicate_lines` e incrementa `summary.duplicates`. Duas linhas iguais no mesmo arquivo seguem a
-mesma regra.
+mesma regra. A resposta também inclui `appointment_dates`, com as datas válidas, únicas e ordenadas
+encontradas no arquivo.
 
 ## API
 
@@ -207,10 +210,11 @@ Todas as rotas de negócio estão sob `/api/v1`. Swagger e OpenAPI são gerados 
 
 | Método | Rota | Uso | Resposta principal |
 | --- | --- | --- | --- |
-| `POST` | `/api/v1/imports/appointments` | multipart CSV | resumo, linhas importadas, duplicadas e erros |
+| `POST` | `/api/v1/imports/appointments` | multipart CSV | resumo, datas, linhas importadas, duplicadas e erros |
 | `GET` | `/api/v1/appointments` | filtros `date`, `status`, `page`, `page_size` | agenda ordenada e paginada |
+| `GET` | `/api/v1/appointments/calendar` | sem parâmetros | datas com consultas e suas quantidades |
 | `GET` | `/api/v1/appointments/{id}` | detalhe para a UI | agendamento e mensagem |
-| `POST` | `/api/v1/confirmations/dispatch` | body `{"date":"2030-01-15"}` | elegíveis, criadas, existentes, ignoradas e enfileiradas |
+| `POST` | `/api/v1/confirmations/dispatch` | `date` e `appointment_ids` opcional | elegíveis, criadas, existentes, ignoradas e enfileiradas |
 | `POST` | `/api/v1/appointments/{id}/response` | `confirmed` ou `declined` | estado final da consulta |
 | `GET` | `/api/v1/messages` | filtro `status` e paginação | estados de processamento |
 | `GET` | `/api/v1/messages/{id}` | detalhe | mensagem e todas as tentativas |
@@ -296,12 +300,13 @@ Somente consultas cuja mensagem está `sent` aceitam resposta. `pending → conf
 A interface é responsiva e cobre:
 
 - seletor de data e filtro por status;
+- atalhos das datas com agenda, contagem de consultas e navegação automática após importação;
 - tabela no desktop e cartões no mobile;
 - upload/drag-and-drop, progresso, resumo e erros por linha;
-- disparo com confirmação explícita e contadores;
+- seleção individual ou dos elegíveis da página e disparo seletivo ou do dia inteiro;
 - polling enquanto houver trabalho assíncrono;
 - confirmação/recusa somente depois de envio;
-- retry de falha e indicação de limite atingido;
+- falha temporária ou definitiva, erro, retry automático, ação manual e indicação de limite;
 - loading, vazio, erro da API e feedback das ações.
 
 TanStack Query mantém cache, invalidação e polling. O cliente possui timeout e traduz o envelope de
@@ -391,8 +396,8 @@ tentativa simples e outra `failed → sent`, registra resposta e confere o filtr
 
 `.github/workflows/ci.yml` roda em todo push e pull request:
 
-1. backend: cache pip, Ruff, mypy, upgrade/downgrade/re-upgrade, 125 testes e cobertura mínima 90%;
-2. frontend: cache npm, ESLint, typecheck, 17 testes com cobertura e build;
+1. backend: cache pip, Ruff, mypy, upgrade/downgrade/re-upgrade, 131 testes e cobertura mínima 90%;
+2. frontend: cache npm, ESLint, typecheck, 22 testes com cobertura e build;
 3. containers: valida os dois Compose, constrói imagens e executa o smoke completo;
 4. em falha do smoke, publica os logs dos containers e sempre remove os volumes do runner.
 
@@ -641,35 +646,6 @@ Este projeto foi desenvolvido com apoio de IA e isso faz parte do processo regis
 ### Onde a IA foi usada
 
 - condução do brainstorming e comparação de alternativas;
-- inspeção do repositório/PDF e transformação dos requisitos em uma especificação aprovada;
-- sugestão de arquitetura, casos de teste e incrementos de implementação;
 - geração assistida de código, migrations, testes, Docker, CI e documentação;
 - depuração a partir de falhas reais e revisão sistemática do diff;
 - execução/organização das evidências de testes, builds, containers e smoke.
-
-### Revisão e decisões humanas
-
-O desenvolvedor revisou e aprovou a especificação por seções antes da implementação. As decisões
-humanas explícitas incluíram: aceitar os dois formatos de data, normalizar telefone brasileiro,
-usar fingerprint de reimportação, exigir mensagem `sent` antes da resposta, usar falha determinística
-e escolher reconciliação persistida em vez de uma outbox transacional dedicada. Commits do projeto
-foram autorizados incrementalmente.
-
-Todo código sugerido foi submetido a Ruff/mypy/ESLint/TypeScript, testes unitários e de integração,
-builds reais, PostgreSQL/Redis, migrations e smoke containerizado. Um exemplo de correção feita pela
-validação foi o oráculo da segunda execução do smoke: uma consulta já confirmada deve ser `ignored`,
-não `already_existing`.
-
-### Sugestões consideradas e descartadas
-
-- Kubernetes e microsserviços: complexidade desproporcional ao desafio;
-- WhatsApp real e serviço pago: fora do requisito e dificultaria reprodução;
-- autenticação sem requisito funcional: bloquearia a demonstração e exigiria outro domínio de negócio;
-- aleatoriedade no simulador: produziria testes instáveis;
-- SQLite como única persistência de teste: esconderia as garantias de concorrência;
-- observabilidade pesada: sem benefício proporcional nesta entrega;
-- outbox transacional genérica: tecnicamente válida, mas preterida pela estratégia aprovada e menor de
-  reconciliação na própria mensagem.
-
-A IA apoiou geração e revisão; as escolhas de escopo, aceite da arquitetura e validação final são
-responsabilidade do desenvolvedor. O histórico de commits preserva essa evolução em etapas pequenas.

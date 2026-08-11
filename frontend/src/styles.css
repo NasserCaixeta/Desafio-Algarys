@@ -75,6 +75,13 @@ select {
   width: fit-content;
 }
 
+.dispatch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .action-feedback {
   margin: -0.25rem 0 1rem;
   padding: 0.75rem 1rem;
@@ -87,6 +94,66 @@ select {
 .action-feedback.state-error {
   background: #fff1f2;
   color: #991b1b;
+}
+
+.appointment-dates {
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #dfe6f1;
+  border-radius: 0.75rem;
+  background: #f8faff;
+}
+
+.appointment-dates-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.appointment-dates-heading h3,
+.appointment-dates-heading span,
+.appointment-dates p {
+  margin: 0;
+}
+
+.appointment-dates-heading h3 {
+  font-size: 0.95rem;
+}
+
+.appointment-dates-heading span {
+  color: #68758a;
+  font-size: 0.8rem;
+}
+
+.appointment-date-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.appointment-date {
+  display: grid;
+  gap: 0.15rem;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #bdc8d9;
+  border-radius: 0.6rem;
+  background: #fff;
+  color: #29364b;
+  text-align: left;
+}
+
+.appointment-date strong {
+  color: #68758a;
+  font-size: 0.75rem;
+}
+
+.appointment-date.is-active {
+  border-color: #3157a4;
+  background: #edf2fb;
+  color: #244685;
 }
 
 .filters label {
@@ -186,6 +253,18 @@ select {
   overflow-x: auto;
 }
 
+.selection-cell {
+  width: 2.75rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.selection-cell input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #3157a4;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -240,6 +319,23 @@ th {
   overflow-wrap: anywhere;
   color: #991b1b;
   font-size: 0.8rem;
+}
+
+.message-status-details {
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
+}
+
+.delivery-detail,
+.retry-scheduled {
+  color: #536078;
+  font-size: 0.8rem;
+}
+
+.retry-scheduled {
+  color: #3157a4;
+  font-weight: 700;
 }
 
 .row-actions {
@@ -328,6 +424,21 @@ select:focus-visible {
 
   .dispatch-button {
     width: 100%;
+  }
+
+  .dispatch-actions {
+    display: grid;
+    width: 100%;
+  }
+
+  .appointment-dates-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .appointment-date {
+    flex: 1 1 9rem;
   }
 
   .table-scroll {

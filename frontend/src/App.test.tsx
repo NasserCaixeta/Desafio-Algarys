@@ -124,3 +124,88 @@ it("shows the message error and changes page", async () => {
     expect(capturedRequests.at(-1)?.searchParams.get("page")).toBe("2");
   });
 });
+
+it("shows dates that have appointments and navigates from their shortcuts", async () => {
+  useAppointmentResponse();
+  server.use(
+    http.get("*/api/v1/appointments/calendar", () =>
+      HttpResponse.json({
+        items: [
+          { date: "2026-08-18", count: 3 },
+          { date: "2026-08-19", count: 1 },
+        ],
+      }),
+    ),
+  );
+  const user = userEvent.setup();
+  renderApp();
+
+  await user.click(
+    await screen.findByRole("button", { name: "18/08/2026 — 3 consultas" }),
+  );
+
+  await waitFor(() => {
+    expect(capturedRequests.at(-1)?.searchParams.get("date")).toBe("2026-08-18");
+  });
+  expect(screen.getByLabelText("Data")).toHaveValue("2026-08-18");
+});
+
+it("opens the imported date automatically when the displayed agenda is empty", async () => {
+  let imported = false;
+  server.use(
+    http.get("*/api/v1/appointments/calendar", () =>
+      HttpResponse.json({
+        items: imported ? [{ date: "2026-08-18", count: 1 }] : [],
+      }),
+    ),
+    http.get("*/api/v1/appointments", ({ request }) => {
+      const requestedDate = new URL(request.url).searchParams.get("date");
+      capturedRequests.push(new URL(request.url));
+      if (requestedDate === "2026-08-18") {
+        return HttpResponse.json({
+          ...appointmentPage,
+          items: [
+            {
+              ...appointmentPage.items[0],
+              id: "imported-appointment",
+              patient_name: "Paciente importado",
+              scheduled_at: "2026-08-18T12:30:00Z",
+            },
+          ],
+          pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+        });
+      }
+      return HttpResponse.json({
+        items: [],
+        pagination: { page: 1, page_size: 20, total: 0, total_pages: 0 },
+      });
+    }),
+    http.post("*/api/v1/imports/appointments", () => {
+      imported = true;
+      return HttpResponse.json({
+        summary: { total_rows: 1, imported: 1, rejected: 0, duplicates: 0 },
+        appointment_dates: ["2026-08-18"],
+        imported_lines: [2],
+        duplicate_lines: [],
+        errors: [],
+      });
+    }),
+  );
+  const user = userEvent.setup();
+  renderApp();
+  await screen.findByText("Nenhum agendamento encontrado");
+
+  const file = new File(
+    [
+      "data_hora,paciente,telefone,procedimento\n",
+      "18/08/2026 09:30,Paciente importado,34999991111,Consulta\n",
+    ],
+    "agenda.csv",
+    { type: "text/csv" },
+  );
+  await user.upload(screen.getByLabelText("Arquivo CSV"), file);
+  await user.click(screen.getByRole("button", { name: "Importar agenda" }));
+
+  expect(await screen.findByText("Paciente importado")).toBeInTheDocument();
+  expect(screen.getByLabelText("Data")).toHaveValue("2026-08-18");
+});

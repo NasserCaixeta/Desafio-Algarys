@@ -11,7 +11,11 @@ function firstFile(files: FileList): File | null {
   return (typeof files.item === "function" ? files.item(0) : null) ?? files[0] ?? null;
 }
 
-export function ImportPanel() {
+interface ImportPanelProps {
+  onImported?: (report: ImportReport) => void;
+}
+
+export function ImportPanel({ onImported }: ImportPanelProps) {
   const [file, setFile] = useState<File | null>(null);
   const [report, setReport] = useState<ImportReport | null>(null);
   const importMutation = useImportAppointments();
@@ -27,7 +31,12 @@ export function ImportPanel() {
     if (!file || importMutation.isPending) return;
     setReport(null);
     importMutation.reset();
-    importMutation.mutate(file, { onSuccess: setReport });
+    importMutation.mutate(file, {
+      onSuccess: (nextReport) => {
+        setReport(nextReport);
+        onImported?.(nextReport);
+      },
+    });
   }
 
   return (

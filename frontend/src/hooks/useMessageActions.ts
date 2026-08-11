@@ -13,7 +13,8 @@ export function useMessageActions() {
   }
 
   const dispatch = useMutation({
-    mutationFn: (date: string) => api.dispatch(date),
+    mutationFn: ({ date, appointmentIds }: { date: string; appointmentIds?: string[] }) =>
+      api.dispatch(date, appointmentIds),
     onSuccess: refreshDashboard,
   });
   const respond = useMutation({

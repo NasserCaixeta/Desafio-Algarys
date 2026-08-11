@@ -32,6 +32,15 @@ export interface AppointmentPage {
   pagination: Pagination;
 }
 
+export interface AppointmentDateSummary {
+  date: string;
+  count: number;
+}
+
+export interface AppointmentCalendar {
+  items: AppointmentDateSummary[];
+}
+
 export interface AppointmentFilters {
   date?: string;
   status?: AppointmentStatus | "";
@@ -52,6 +61,7 @@ export interface ImportReport {
     rejected: number;
     duplicates: number;
   };
+  appointment_dates: string[];
   imported_lines: number[];
   duplicate_lines: number[];
   errors: ImportRowError[];

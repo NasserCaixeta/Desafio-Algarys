@@ -7,7 +7,10 @@ export function useImportAppointments() {
   return useMutation({
     mutationFn: (file: File) => api.importAppointments(file),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["appointments"] }),
+        queryClient.invalidateQueries({ queryKey: ["appointment-dates"] }),
+      ]);
     },
   });
 }
