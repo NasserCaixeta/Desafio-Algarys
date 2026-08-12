@@ -154,10 +154,24 @@ Regras:
 - linhas em branco são ignoradas;
 - linhas inválidas voltam com número, dados originais e motivo sem abortar as válidas.
 
-O exemplo está em [`examples/appointments.csv`](examples/appointments.csv). Para importar pela API:
+Arquivos prontos para teste manual estão em `examples/`:
+
+| Arquivo | Cenário |
+| --- | --- |
+| [`appointments-common.csv`](examples/appointments-common.csv) | fluxo recomendado para começar: 15 consultas realistas distribuídas em 18 e 19/08/2026 |
+| [`appointments-partially-invalid.csv`](examples/appointments-partially-invalid.csv) | importação parcial: duas linhas válidas e quatro rejeitadas com motivos diferentes |
+| [`appointments.csv`](examples/appointments.csv) | cenário técnico mínimo usado pelo smoke test, com um envio normal e um retry determinístico |
+
+Na interface, abra **Importar agenda**, selecione ou arraste um desses arquivos e confirme o envio.
+Quando a agenda estiver vazia, o frontend abre automaticamente uma das datas importadas; as demais
+ficam disponíveis nos atalhos de data. Para um primeiro contato com a aplicação, use
+`appointments-common.csv`. Depois, use o arquivo parcialmente inválido para conferir que erros por
+linha não cancelam os registros válidos.
+
+Também é possível importar o cenário comum diretamente pela API:
 
 ```bash
-curl -F 'file=@examples/appointments.csv;type=text/csv' \
+curl -F 'file=@examples/appointments-common.csv;type=text/csv' \
   http://localhost:8000/api/v1/imports/appointments
 ```
 
