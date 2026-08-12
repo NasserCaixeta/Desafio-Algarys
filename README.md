@@ -1,12 +1,21 @@
 # Plataforma de confirmação de consultas
 
+[![CI](https://github.com/NasserCaixeta/Desafio-Algarys/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/NasserCaixeta/Desafio-Algarys/actions/workflows/ci.yml)
+
 Aplicação Full Stack para importar a agenda de uma clínica, disparar confirmações, acompanhar o
 processamento assíncrono e registrar a resposta do paciente. O envio é simulado de forma
 determinística: nenhum WhatsApp, SMS, e-mail ou serviço pago é utilizado.
 
 O projeto prioriza migrations versionadas, worker independente, idempotência no banco,
 concorrência segura, retries limitados, recuperação de falhas de publicação, logs estruturados,
-healthchecks e CI.
+healthchecks e CI/CD.
+
+## Demonstração online
+
+A aplicação está disponível em <https://desafio-algarys.duckdns.org>. A interface, a API e a
+documentação Swagger são protegidas por HTTP Basic no Nginx; as credenciais são compartilhadas com
+o avaliador pelo canal privado da entrega e não fazem parte do repositório. O liveness permanece
+público em <https://desafio-algarys.duckdns.org/health/live>.
 
 ## Execução rápida
 
@@ -379,9 +388,10 @@ Logs nativos de Uvicorn e Celery permanecem textuais ao redor dos eventos estrut
 - **Retry apenas no Celery:** esconderia tentativas e erros que pertencem ao domínio auditável.
 - **WebSocket:** polling adaptativo atende ao volume com menor complexidade operacional.
 
-Deliberadamente não foram implementados integração paga, autenticação sem requisito, Kubernetes,
-microsserviços artificiais, aleatoriedade, observabilidade pesada ou funcionalidades clínicas fora
-do desafio.
+Deliberadamente não foram implementados integração paga, autenticação de usuários sem requisito,
+Kubernetes, microsserviços artificiais, aleatoriedade, observabilidade pesada ou funcionalidades
+clínicas fora do desafio. O HTTP Basic da demonstração é apenas uma proteção de perímetro no Nginx,
+não um sistema de usuários da aplicação.
 
 ## Limitações e riscos de produção
 
@@ -390,7 +400,8 @@ do desafio.
   como chave de idempotência no provedor externo.
 - Uma perda total do Redis depois de `enqueued_at` pode deixar trabalho pendente; um outbox dedicado
   ou lease de publicação seria a evolução natural.
-- Não há DLQ, métricas, alertas, rate limiting ou autenticação.
+- Não há DLQ, métricas, alertas, rate limiting, autenticação de usuários ou RBAC. O HTTP Basic da
+  demonstração não oferece autorização por clínica, função ou recurso.
 - O telefone é validado como brasileiro; internacionalização exigiria regra por país.
 - O CD mantém cinco backups locais anteriores às migrations; cópia externa, teste de restauração e
   renovação TLS ainda dependem de agendamento e monitoramento da VPS.

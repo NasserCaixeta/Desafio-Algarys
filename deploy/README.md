@@ -182,23 +182,25 @@ Com GitHub CLI autenticado, o valor pode ser enviado sem gravá-lo no repositór
 gh variable set PRODUCTION_URL --env production --body 'https://clinica.example.com'
 ```
 
-As senhas do PostgreSQL, o Basic Auth, o login do GHCR e os certificados permanecem apenas na VPS.
-Se as imagens forem privadas, autentique o Docker da VPS uma vez com um token limitado a
-`read:packages`.
+O CD ativo não depende de credenciais SSH nem de Basic Auth armazenadas no GitHub. As credenciais
+necessárias à execução ficam na VPS. Se as imagens forem privadas, autentique o Docker da VPS uma
+vez com um token limitado a `read:packages`.
 
 ### Rollback do CD
 
 Se migration, inicialização ou healthcheck falhar, o script restaura automaticamente o checkout,
 `IMAGE_TAG`, `APP_VERSION` e containers da versão anterior. Os arquivos de estado e backups ficam
-em `.deploy/`, ignorado pelo Git. Os logs do workflow mostram se o rollback também ficou saudável.
+em `.deploy/`, ignorado pelo Git. O resultado do deploy e de um eventual rollback fica no journal
+do serviço `clinic-confirmations-cd.service`.
 
 O rollback não executa `alembic downgrade` nem restaura o dump automaticamente. Uma migration nova
 deve permanecer compatível com a imagem anterior para que o rollback de aplicação seja seguro. Se
 isso não for possível, use uma migration expand/contract e remova estruturas antigas somente em
 uma entrega posterior.
 
-Para acompanhar uma entrega, abra **Actions → CD**. O deployment também aparece no Environment
-`production`, associado ao SHA exato que está na VPS.
+Para acompanhar a publicação, abra **Actions → CD**. O Environment `production` registra o SHA da
+release publicada; como a implantação é assíncrona, confirme o SHA realmente ativo por `/status`,
+por `.deploy/current-tag` ou pelo journal do watcher na VPS.
 
 ## 7. Fazer backup e restauração
 
