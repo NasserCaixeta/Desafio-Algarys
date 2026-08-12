@@ -427,7 +427,7 @@ O projeto inclui `compose.prod.yaml`, Nginx com TLS e um stack para Portainer. O
 
 ```bash
 sudo install -d -m 0750 -o "$USER" -g "$USER" /opt/clinic-confirmations
-git clone <URL_DO_REPOSITORIO> /opt/clinic-confirmations
+git clone https://github.com/NasserCaixeta/Desafio-Algarys.git /opt/clinic-confirmations
 cd /opt/clinic-confirmations
 cp .env.example .env.production
 
